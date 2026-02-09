@@ -6,6 +6,10 @@ import {
   fetchWeights,
   updateWeights,
 } from "../api/client";
+import {
+  getThresholdImplication,
+  getWeightImplication,
+} from "../data/configImplications";
 
 type Tab = "thresholds" | "weights";
 
@@ -222,6 +226,21 @@ export default function Config() {
                   className="w-full"
                 />
                 <p className="text-xs text-muted mt-1">{def.desc}</p>
+                {thresholdsQ.data &&
+                  getThresholdImplication(
+                    def.key,
+                    thresholdsQ.data[def.key],
+                    localThresholds[def.key] ?? 0
+                  ) && (
+                    <div className="mt-2 px-3 py-2 bg-accent/10 border border-accent/20 rounded-lg text-xs text-accent leading-relaxed">
+                      <span className="font-medium">Impact: </span>
+                      {getThresholdImplication(
+                        def.key,
+                        thresholdsQ.data[def.key],
+                        localThresholds[def.key] ?? 0
+                      )}
+                    </div>
+                  )}
               </div>
             ))}
           </div>
@@ -274,6 +293,23 @@ export default function Config() {
                   className="w-full"
                 />
                 <p className="text-xs text-muted mt-1">{def.desc}</p>
+                {weightsQ.data &&
+                  getWeightImplication(
+                    def.key,
+                    def.label,
+                    weightsQ.data[def.key],
+                    localWeights[def.key] ?? 0
+                  ) && (
+                    <div className="mt-2 px-3 py-2 bg-accent/10 border border-accent/20 rounded-lg text-xs text-accent leading-relaxed">
+                      <span className="font-medium">Impact: </span>
+                      {getWeightImplication(
+                        def.key,
+                        def.label,
+                        weightsQ.data[def.key],
+                        localWeights[def.key] ?? 0
+                      )}
+                    </div>
+                  )}
               </div>
             ))}
           </div>

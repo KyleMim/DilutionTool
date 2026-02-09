@@ -80,15 +80,10 @@ def score_company(db_session: Session, company_id: int, config: ScoringConfig) -
     else:
         scores["cash_runway_score"] = 0
 
-    # 6. ATM active score
-    two_years_ago = date.today() - timedelta(days=2 * 365)
-    atm_active = any(
-        (f.filing_type in ("S-3", "S-3/A") or f.dilution_type == "atm")
-        and f.filed_date and f.filed_date >= two_years_ago
-        for f in filings
-    )
+    # 6. ATM active score (decay-based)
+    atm_score, atm_active = _calc_atm_score(filings)
     metrics["atm_program_active"] = atm_active
-    scores["atm_active_score"] = 100 if atm_active else 0
+    scores["atm_active_score"] = atm_score
 
     # Composite: weighted average with renormalization for missing scores
     composite = _weighted_composite(scores, config)
@@ -248,6 +243,52 @@ def _calc_cash_runway_months(fundamentals: list[FundamentalsQuarterly]) -> float
 
     quarters_of_runway = latest_cash / avg_quarterly_burn
     return quarters_of_runway * 3  # Convert to months
+
+
+def _calc_atm_score(filings: list[SecFiling]) -> tuple[float, bool]:
+    """Score ATM risk based on shelf registration age and selling activity.
+
+    A fresh shelf with no sales = highest risk (fully loaded, no dilution priced in).
+    An old shelf with heavy sales = lower risk (capacity likely exhausted).
+    """
+    two_years_ago = date.today() - timedelta(days=2 * 365)
+
+    # Find the most recent S-3/ATM shelf filing within 2 years
+    shelf_filings = [
+        f for f in filings
+        if (f.filing_type in ("S-3", "S-3/A") or f.dilution_type == "atm")
+        and f.filed_date and f.filed_date >= two_years_ago
+    ]
+
+    if not shelf_filings:
+        return 0.0, False
+
+    # Sort by date descending, take most recent
+    shelf_filings.sort(key=lambda f: f.filed_date, reverse=True)
+    latest_shelf = shelf_filings[0]
+    shelf_date = latest_shelf.filed_date
+
+    # Check for dilutive filings after the shelf date (evidence of selling)
+    has_selling = any(
+        f.is_dilution_event
+        and f.filed_date and f.filed_date > shelf_date
+        and f.filing_type not in ("S-3", "S-3/A")
+        for f in filings
+    )
+
+    # Calculate shelf age in months
+    days_since = (date.today() - shelf_date).days
+    months_since = days_since / 30.44  # average days per month
+
+    # Decay matrix
+    if months_since < 6:
+        score = 100.0 if not has_selling else 90.0
+    elif months_since < 12:
+        score = 70.0 if not has_selling else 80.0
+    else:  # 12-24 months
+        score = 25.0 if not has_selling else 60.0
+
+    return score, True
 
 
 def _weighted_composite(scores: dict, config: ScoringConfig) -> float:

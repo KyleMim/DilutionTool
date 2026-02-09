@@ -1,6 +1,8 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import MetricTooltip, { DetailedMetricTooltipContent } from "../components/Tooltip";
+import { METRICS } from "../data/metricDefinitions";
 import {
   AreaChart,
   Area,
@@ -231,24 +233,28 @@ export default function CompanyDetail() {
               score={score.share_cagr_score}
               metric={formatPct(score.share_cagr_3y)}
               desc="3-year annualized share growth"
+              metricKey="share_cagr"
             />
             <ScoreCard
               label="FCF Burn"
               score={score.fcf_burn_score}
               metric={formatPct(score.fcf_burn_rate)}
               desc="Annual FCF burn / market cap"
+              metricKey="fcf_burn"
             />
             <ScoreCard
               label="SBC / Revenue"
               score={score.sbc_revenue_score}
               metric={formatPct(score.sbc_revenue_pct)}
               desc="Trailing 4Q SBC / revenue"
+              metricKey="sbc_revenue"
             />
             <ScoreCard
               label="Offering Freq"
               score={score.offering_freq_score}
               metric={`${score.offering_count_3y ?? 0} filings`}
               desc="Dilutive filings in 3 years"
+              metricKey="offering_freq"
             />
             <ScoreCard
               label="Cash Runway"
@@ -259,12 +265,14 @@ export default function CompanyDetail() {
                   : "--"
               }
               desc="Months of cash at current burn"
+              metricKey="cash_runway"
             />
             <ScoreCard
               label="ATM Active"
               score={score.atm_active_score}
               metric={score.atm_program_active ? "Yes" : "No"}
               desc="Active shelf/ATM program"
+              metricKey="atm_active"
             />
           </div>
         )}
@@ -563,11 +571,13 @@ function ScoreCard({
   score,
   metric,
   desc,
+  metricKey,
 }: {
   label: string;
   score: number | null;
   metric: string;
   desc: string;
+  metricKey?: string;
 }) {
   const color =
     score === null
@@ -580,11 +590,32 @@ function ScoreCard({
             ? "border-accent/50"
             : "border-success/50";
 
+  const metricDef = metricKey ? METRICS[metricKey] : undefined;
+
   return (
     <div className={`bg-surface rounded-lg border ${color} p-4`}>
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-muted uppercase tracking-wider">
-          {label}
+          {metricDef ? (
+            <MetricTooltip
+              position="top"
+              maxWidth="max-w-sm"
+              content={
+                <DetailedMetricTooltipContent
+                  detailedDesc={metricDef.detailedDesc}
+                  calculation={metricDef.calculation}
+                  timePeriod={metricDef.timePeriod}
+                  scoreInterpretation={metricDef.scoreInterpretation}
+                  defaultWeight={metricDef.defaultWeight}
+                  caveat={metricDef.caveat}
+                />
+              }
+            >
+              <span>{label}</span>
+            </MetricTooltip>
+          ) : (
+            label
+          )}
         </span>
         <ScoreBadge score={score} size="sm" />
       </div>

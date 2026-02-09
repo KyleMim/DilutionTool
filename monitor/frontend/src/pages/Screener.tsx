@@ -9,6 +9,10 @@ import {
 } from "../api/client";
 import ScoreBadge from "../components/ScoreBadge";
 import SparklineChart from "../components/SparklineChart";
+import Tooltip, { MetricTooltipContent } from "../components/Tooltip";
+import PipelineExplainer from "../components/PipelineExplainer";
+import { METRICS } from "../data/metricDefinitions";
+import type { MetricDefinition } from "../data/metricDefinitions";
 
 type SortKey = keyof CompanyListItem;
 type SortDir = "asc" | "desc";
@@ -101,6 +105,9 @@ export default function Screener() {
         </div>
       )}
 
+      {/* Pipeline explainer */}
+      <PipelineExplainer />
+
       {/* Sector tabs */}
       {sectors && sectors.length > 0 && (
         <div className="flex gap-2 mb-4 flex-wrap">
@@ -139,13 +146,13 @@ export default function Screener() {
                 <SortHeader label="Company" field="ticker" current={sortKey} dir={sortDir} onClick={toggleSort} />
                 <SortHeader label="Score" field="composite_score" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" />
                 <SortHeader label="Price 12M" field="price_change_12m" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" />
-                <SortHeader label="Share CAGR" field="share_cagr_3y" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" />
+                <SortHeader label="Share CAGR" field="share_cagr_3y" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" tooltip={METRICS.share_cagr} />
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-muted uppercase tracking-wider">Trend</th>
-                <SortHeader label="FCF Burn" field="fcf_burn_rate" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" />
-                <SortHeader label="SBC/Rev" field="sbc_revenue_pct" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" />
-                <SortHeader label="Offerings" field="offering_count_3y" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" />
-                <SortHeader label="Runway" field="cash_runway_months" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" />
-                <SortHeader label="ATM" field="atm_active_score" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-center" />
+                <SortHeader label="FCF Burn" field="fcf_burn_rate" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" tooltip={METRICS.fcf_burn} />
+                <SortHeader label="SBC/Rev" field="sbc_revenue_pct" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" tooltip={METRICS.sbc_revenue} />
+                <SortHeader label="Offerings" field="offering_count_3y" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" tooltip={METRICS.offering_freq} />
+                <SortHeader label="Runway" field="cash_runway_months" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" tooltip={METRICS.cash_runway} />
+                <SortHeader label="ATM" field="atm_active_score" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-center" tooltip={METRICS.atm_active} />
                 <SortHeader label="Mkt Cap" field="market_cap" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" />
               </tr>
             </thead>
@@ -281,6 +288,7 @@ function SortHeader({
   dir,
   onClick,
   className = "",
+  tooltip,
 }: {
   label: string;
   field: SortKey;
@@ -288,6 +296,7 @@ function SortHeader({
   dir: SortDir;
   onClick: (key: SortKey) => void;
   className?: string;
+  tooltip?: MetricDefinition;
 }) {
   const isActive = current === field;
   return (
@@ -297,7 +306,24 @@ function SortHeader({
       } ${className}`}
       onClick={() => onClick(field)}
     >
-      {label}
+      {tooltip ? (
+        <Tooltip
+          position="bottom"
+          content={
+            <MetricTooltipContent
+              shortDesc={tooltip.shortDesc}
+              calculation={tooltip.calculation}
+              timePeriod={tooltip.timePeriod}
+              scoreInterpretation={tooltip.scoreInterpretation}
+              caveat={tooltip.caveat}
+            />
+          }
+        >
+          <span>{label}</span>
+        </Tooltip>
+      ) : (
+        label
+      )}
       {isActive && (
         <span className="ml-1">{dir === "desc" ? "\u25BC" : "\u25B2"}</span>
       )}
