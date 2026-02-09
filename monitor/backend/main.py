@@ -548,9 +548,16 @@ def get_stats(db: Session = Depends(get_db)):
 # ------------------------------------------------------------------ #
 
 frontend_dist = os.path.join(os.path.dirname(__file__), "../frontend/dist")
+print(f"[STARTUP] Looking for frontend build at: {frontend_dist}")
+print(f"[STARTUP] Frontend dist exists: {os.path.exists(frontend_dist)}")
 if os.path.exists(frontend_dist):
+    print(f"[STARTUP] Frontend dist contents: {os.listdir(frontend_dist)}")
+
     # Mount static assets
-    app.mount("/assets", StaticFiles(directory=f"{frontend_dist}/assets"), name="assets")
+    assets_dir = os.path.join(frontend_dist, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+        print(f"[STARTUP] Mounted /assets from {assets_dir}")
 
     @app.get("/{full_path:path}")
     async def serve_react_app(full_path: str):
@@ -565,4 +572,10 @@ if os.path.exists(frontend_dist):
             return FileResponse(file_path)
 
         # Serve index.html for all other routes (SPA routing)
-        return FileResponse(os.path.join(frontend_dist, "index.html"))
+        index_path = os.path.join(frontend_dist, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        else:
+            raise HTTPException(status_code=404, detail="Frontend not built")
+else:
+    print(f"[STARTUP] WARNING: Frontend dist not found. Only API will be available.")
