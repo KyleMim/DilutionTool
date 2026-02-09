@@ -179,14 +179,27 @@ def send_message(
     conversation_id: int,
     body: MessageCreate,
 ):
-    """Send a user message and stream back the AI response via SSE."""
+    """Send a user message and stream back the AI response via SSE.
+
+    The agent has access to tools:
+    - lookup_company_profile: Fresh company data from FMP
+    - lookup_fundamentals: Quarterly financials from FMP
+    - lookup_stock_price: Historical prices from FMP
+    - lookup_dilution_score: Internal dilution scores + SEC filings
+    - search_notes: Previous research notes and memos
+    """
     # Use a dedicated session for the streaming lifecycle
     db = SessionLocal()
+    cfg = get_config()
     try:
         conv = db.query(Conversation).get(conversation_id)
         if not conv:
             db.close()
             raise HTTPException(404, "Conversation not found")
+
+        if not cfg.anthropic_api_key:
+            db.close()
+            raise HTTPException(503, "ANTHROPIC_API_KEY not configured")
 
         # Save user message
         user_msg = Message(
@@ -222,7 +235,7 @@ def send_message(
         else:
             system_prompt = SYSTEM_PROMPT_GLOBAL
 
-        llm = get_llm_client()
+        llm = LLMClient(api_key=cfg.anthropic_api_key, model=cfg.llm_model)
 
     except HTTPException:
         raise
@@ -232,25 +245,54 @@ def send_message(
 
     def event_generator():
         try:
-            full_response = []
-            for chunk in llm.stream_response(llm_messages, system_prompt):
-                full_response.append(chunk)
-                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+            final_content = ""
+            for event in llm.stream_with_tools(
+                llm_messages, system_prompt, db, cfg.fmp_api_key
+            ):
+                if event["type"] == "tool_use":
+                    # Notify frontend that a tool is being called
+                    tool_name = event["tool"]
+                    tool_input = event.get("input", {})
+                    friendly = _tool_friendly_name(tool_name, tool_input)
+                    yield f"data: {json.dumps({'type': 'tool_use', 'tool': tool_name, 'description': friendly})}\n\n"
+
+                elif event["type"] == "chunk":
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': event['content']})}\n\n"
+
+                elif event["type"] == "done":
+                    final_content = event["content"]
 
             # Save assistant message
-            assistant_content = "".join(full_response)
-            assistant_msg = Message(
-                conversation_id=conversation_id,
-                role="assistant",
-                content=assistant_content,
-            )
-            db.add(assistant_msg)
-            conv.updated_at = datetime.utcnow()
-            db.commit()
-            yield f"data: {json.dumps({'type': 'done', 'message_id': assistant_msg.id})}\n\n"
+            if final_content:
+                assistant_msg = Message(
+                    conversation_id=conversation_id,
+                    role="assistant",
+                    content=final_content,
+                )
+                db.add(assistant_msg)
+                conv.updated_at = datetime.utcnow()
+                db.commit()
+                yield f"data: {json.dumps({'type': 'done', 'message_id': assistant_msg.id})}\n\n"
+
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
         finally:
             db.close()
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+def _tool_friendly_name(tool_name: str, tool_input: dict) -> str:
+    """Generate a user-friendly description of what tool is being used."""
+    ticker = tool_input.get("ticker", "")
+    query = tool_input.get("query", "")
+    note_id = tool_input.get("note_id", "")
+    descriptions = {
+        "lookup_company_profile": f"Looking up {ticker} company profile...",
+        "lookup_fundamentals": f"Fetching {ticker} quarterly financials...",
+        "lookup_stock_price": f"Getting {ticker} stock price history...",
+        "lookup_dilution_score": f"Checking {ticker} dilution score...",
+        "search_notes": f"Searching notes{' for ' + query if query else ''}{' (' + ticker + ')' if ticker else ''}...",
+        "get_note_detail": f"Reading note #{note_id}...",
+    }
+    return descriptions.get(tool_name, f"Using {tool_name}...")

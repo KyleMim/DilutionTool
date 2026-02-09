@@ -25,9 +25,30 @@ def _migrate(engine):
                 conn.execute(text("ALTER TABLE dilution_scores ADD COLUMN price_change_12m REAL"))
 
 
+def _create_fts_index(engine):
+    """Create FTS5 virtual table for full-text search on notes (idempotent)."""
+    with engine.begin() as conn:
+        # Create FTS5 virtual table if it doesn't exist
+        conn.execute(text("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+                title, content, ticker, note_type,
+                content_rowid=id,
+                tokenize='porter unicode61'
+            )
+        """))
+
+        # Backfill any existing notes that aren't in the FTS index
+        conn.execute(text("""
+            INSERT OR IGNORE INTO notes_fts(rowid, title, content, ticker, note_type)
+            SELECT id, title, content, COALESCE(ticker, ''), note_type FROM notes
+            WHERE id NOT IN (SELECT rowid FROM notes_fts)
+        """))
+
+
 def create_tables():
     Base.metadata.create_all(engine)
     _migrate(engine)
+    _create_fts_index(engine)
 
 
 def get_session():

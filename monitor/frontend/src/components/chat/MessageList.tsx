@@ -3,14 +3,16 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MessageBubble from "./MessageBubble";
 import type { MessageResponse } from "../../api/client";
+import type { ToolActivity } from "../../hooks/useChat";
 
 interface Props {
   messages: MessageResponse[];
   isStreaming: boolean;
   streamingContent: string;
+  toolActivity?: ToolActivity | null;
 }
 
-export default function MessageList({ messages, isStreaming, streamingContent }: Props) {
+export default function MessageList({ messages, isStreaming, streamingContent, toolActivity }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,7 +51,18 @@ export default function MessageList({ messages, isStreaming, streamingContent }:
           </div>
         </div>
       )}
-      {isStreaming && !streamingContent && (
+      {isStreaming && toolActivity && (
+        <div className="flex justify-start mb-3">
+          <div className="rounded-lg px-3 py-2 bg-accent/5 border border-accent/20 flex items-center gap-2">
+            <svg className="w-3.5 h-3.5 text-accent animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span className="text-xs text-accent">{toolActivity.description}</span>
+          </div>
+        </div>
+      )}
+      {isStreaming && !streamingContent && !toolActivity && (
         <div className="flex justify-start mb-3">
           <div className="rounded-lg px-4 py-3 bg-surface border border-border">
             <div className="flex gap-1">

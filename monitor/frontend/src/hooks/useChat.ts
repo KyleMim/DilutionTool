@@ -9,11 +9,17 @@ import {
   type MessageResponse,
 } from "../api/client";
 
+export interface ToolActivity {
+  tool: string;
+  description: string;
+}
+
 interface UseChatReturn {
   conversation: ConversationResponse | null;
   messages: MessageResponse[];
   isStreaming: boolean;
   streamingContent: string;
+  toolActivity: ToolActivity | null;
   sendMessage: (content: string) => void;
   conversations: ConversationResponse[];
   selectConversation: (id: number) => Promise<void>;
@@ -29,6 +35,7 @@ export function useChat(ticker?: string): UseChatReturn {
   const [conversations, setConversations] = useState<ConversationResponse[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [toolActivity, setToolActivity] = useState<ToolActivity | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -84,6 +91,7 @@ export function useChat(ticker?: string): UseChatReturn {
       setError(null);
       setIsStreaming(true);
       setStreamingContent("");
+      setToolActivity(null);
 
       try {
         // Create conversation if needed
@@ -137,12 +145,17 @@ export function useChat(ticker?: string): UseChatReturn {
 
             try {
               const event = JSON.parse(jsonStr);
-              if (event.type === "chunk") {
+              if (event.type === "tool_use") {
+                setToolActivity({ tool: event.tool, description: event.description });
+              } else if (event.type === "chunk") {
+                setToolActivity(null);
                 accumulated += event.content;
                 setStreamingContent(accumulated);
               } else if (event.type === "done") {
+                setToolActivity(null);
                 assistantMsgId = event.message_id;
               } else if (event.type === "error") {
+                setToolActivity(null);
                 setError(event.content);
               }
             } catch {
@@ -182,6 +195,7 @@ export function useChat(ticker?: string): UseChatReturn {
     messages,
     isStreaming,
     streamingContent,
+    toolActivity,
     sendMessage,
     conversations,
     selectConversation,

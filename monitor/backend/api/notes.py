@@ -5,7 +5,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import desc
+from sqlalchemy import desc, text
 from sqlalchemy.orm import Session
 
 from backend.database import SessionLocal
@@ -69,6 +69,8 @@ def create_note(body: NoteCreate, db: Session = Depends(get_db)):
     db.add(note)
     db.commit()
     db.refresh(note)
+    _fts_upsert(db, note)
+    db.commit()
     return _to_response(note)
 
 
@@ -105,6 +107,8 @@ def update_note(note_id: int, body: NoteUpdate, db: Session = Depends(get_db)):
     note.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(note)
+    _fts_upsert(db, note)
+    db.commit()
     return _to_response(note)
 
 
@@ -113,6 +117,7 @@ def delete_note(note_id: int, db: Session = Depends(get_db)):
     note = db.query(Note).get(note_id)
     if not note:
         raise HTTPException(404, "Note not found")
+    _fts_delete(db, note.id)
     db.delete(note)
     db.commit()
 
@@ -156,6 +161,8 @@ def save_conversation_as_note(
     db.add(note)
     db.commit()
     db.refresh(note)
+    _fts_upsert(db, note)
+    db.commit()
     return _to_response(note)
 
 
@@ -210,7 +217,32 @@ def generate_memo_from_conversation(
     db.add(note)
     db.commit()
     db.refresh(note)
+    _fts_upsert(db, note)
+    db.commit()
     return _to_response(note)
+
+
+def _fts_upsert(db: Session, note: Note):
+    """Insert or update the FTS index for a note."""
+    db.execute(text("DELETE FROM notes_fts WHERE rowid = :id"), {"id": note.id})
+    db.execute(
+        text(
+            "INSERT INTO notes_fts(rowid, title, content, ticker, note_type) "
+            "VALUES (:id, :title, :content, :ticker, :note_type)"
+        ),
+        {
+            "id": note.id,
+            "title": note.title,
+            "content": note.content,
+            "ticker": note.ticker or "",
+            "note_type": note.note_type,
+        },
+    )
+
+
+def _fts_delete(db: Session, note_id: int):
+    """Remove a note from the FTS index."""
+    db.execute(text("DELETE FROM notes_fts WHERE rowid = :id"), {"id": note_id})
 
 
 def _to_response(note: Note) -> NoteResponse:

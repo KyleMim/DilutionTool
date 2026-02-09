@@ -28,6 +28,7 @@ export default function ChatPanel({
     messages,
     isStreaming,
     streamingContent,
+    toolActivity,
     sendMessage,
     conversations,
     selectConversation,
@@ -168,6 +169,7 @@ export default function ChatPanel({
             messages={messages}
             isStreaming={isStreaming}
             streamingContent={streamingContent}
+            toolActivity={toolActivity}
           />
         </>
       )}
