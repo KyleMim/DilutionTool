@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(dir:*)",
+      "Bash(python -c:*)",
+      "Bash(npm install:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(npx vite build:*)"
+    ]
+  }
+}

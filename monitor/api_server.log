@@ -1,0 +1,84 @@
+INFO:     Started server process [37908]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:54912 - "OPTIONS /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62791 - "OPTIONS /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61823 - "OPTIONS /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54912 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62791 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54912 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61928 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61928 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58582 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52676 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62085 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57725 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49378 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49378 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49378 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58758 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58758 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58758 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50491 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50491 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51766 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51627 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51627 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65461 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51339 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51339 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55437 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50290 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50290 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50290 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64901 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64901 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56280 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51222 - "OPTIONS /api/companies/CABA HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59432 - "OPTIONS /api/companies/CABA/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65527 - "OPTIONS /api/companies/CABA/filings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59432 - "GET /api/companies/CABA/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51222 - "GET /api/companies/CABA/filings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65527 - "GET /api/companies/CABA HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63269 - "OPTIONS /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63269 - "OPTIONS /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63269 - "OPTIONS /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63269 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63269 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63269 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59167 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62742 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49930 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49981 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49981 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58719 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52631 - "OPTIONS /api/config/thresholds HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51726 - "OPTIONS /api/config/weights HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51726 - "GET /api/config/thresholds HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52631 - "GET /api/config/weights HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64678 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56834 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64920 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58421 - "OPTIONS /api/companies/MVIS HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58421 - "OPTIONS /api/companies/MVIS/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58421 - "OPTIONS /api/companies/MVIS/filings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58421 - "GET /api/companies/MVIS HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58421 - "GET /api/companies/MVIS/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58421 - "GET /api/companies/MVIS/filings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49157 - "GET /api/screener/sectors HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63089 - "GET /api/companies?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64058 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62586 - "OPTIONS /api/companies/NXDT HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60565 - "OPTIONS /api/companies/NXDT/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62586 - "OPTIONS /api/companies/NXDT/filings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60565 - "GET /api/companies/NXDT HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62586 - "GET /api/companies/NXDT/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60565 - "GET /api/companies/NXDT/filings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53570 - "GET /api/companies/NXDT HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50273 - "GET /api/companies/NXDT/filings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54185 - "GET /api/companies/NXDT/history HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [37908]
