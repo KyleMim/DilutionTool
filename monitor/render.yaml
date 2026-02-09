@@ -4,11 +4,11 @@ services:
     env: python
     region: oregon
     plan: free
+    rootDir: monitor
     buildCommand: |
-      cd monitor
       pip install -r requirements.txt
       cd frontend && npm install && npm run build && cd ..
-    startCommand: cd monitor && uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: FMP_API_KEY
         sync: false
