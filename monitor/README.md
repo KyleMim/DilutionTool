@@ -76,6 +76,8 @@ This is a portfolio/demo version. The backend is a single-process FastAPI server
 
 ## Quick Start
 
+### Local Development
+
 ```bash
 # Clone the repo
 git clone <repo-url>
@@ -98,6 +100,13 @@ Or use the Makefile:
 ```bash
 make setup    # Install all dependencies
 python run.py # Start servers (auto-backfills if no data)
+```
+
+### Production Build
+
+```bash
+make build    # Build frontend for production
+make prod     # Run production server locally (serves built React app from FastAPI)
 ```
 
 ## Full Backfill
@@ -164,6 +173,18 @@ monitor/
 └── data/
     └── dilution_monitor.db       # SQLite database (gitignored)
 ```
+
+## Deployment
+
+This app is ready for deployment on Render, Railway, or your own server. See **[DEPLOY.md](DEPLOY.md)** for full deployment instructions.
+
+**Quick deploy to Render:**
+1. Push to GitHub
+2. Connect repo to Render (auto-detects `render.yaml`)
+3. Set `FMP_API_KEY` and `ANTHROPIC_API_KEY` environment variables
+4. Deploy! The FastAPI server automatically serves the built React app.
+
+The free tier works but has limitations (ephemeral storage, 512MB RAM). See [DEPLOY.md](DEPLOY.md) for production setup with PostgreSQL and persistent storage.
 
 ## What I'd Add for Production
 

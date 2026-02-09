@@ -17,9 +17,12 @@ Endpoints:
 """
 from typing import Optional, List
 from datetime import date, datetime, timedelta
+import os
 
 from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
@@ -538,3 +541,28 @@ def get_stats(db: Session = Depends(get_db)):
         avg_score=float(avg_score_result) if avg_score_result else None,
         sectors=[{"sector": s, "count": c} for s, c in sectors]
     )
+
+
+# ------------------------------------------------------------------ #
+# Serve React app (production only)
+# ------------------------------------------------------------------ #
+
+frontend_dist = os.path.join(os.path.dirname(__file__), "../frontend/dist")
+if os.path.exists(frontend_dist):
+    # Mount static assets
+    app.mount("/assets", StaticFiles(directory=f"{frontend_dist}/assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_react_app(full_path: str):
+        """Serve React app for all non-API routes."""
+        # Let API routes pass through (they're already defined above)
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not found")
+
+        # Check if requesting a static file
+        file_path = os.path.join(frontend_dist, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+
+        # Serve index.html for all other routes (SPA routing)
+        return FileResponse(os.path.join(frontend_dist, "index.html"))

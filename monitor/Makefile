@@ -1,9 +1,18 @@
-.PHONY: setup backfill quick api frontend dev test clean
+.PHONY: setup backfill quick api frontend dev test clean build deploy
 
 # Install all dependencies
 setup:
 	pip install -r requirements.txt
 	cd frontend && npm install
+
+# Build frontend for production
+build:
+	cd frontend && npm run build
+
+# Build and run production server locally
+prod:
+	cd frontend && npm run build
+	uvicorn backend.main:app --host 0.0.0.0 --port 8000
 
 # Full universe backfill (~2 hours)
 backfill:
