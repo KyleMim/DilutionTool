@@ -159,8 +159,9 @@ class SectorCount(BaseModel):
 # Routes
 # ------------------------------------------------------------------ #
 
-@app.get("/")
-def root():
+@app.get("/api/health")
+def health():
+    """Health check endpoint for monitoring."""
     return {"status": "ok", "version": "1.0.0"}
 
 
