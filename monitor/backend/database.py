@@ -43,11 +43,21 @@ _is_sqlite = engine.dialect.name == "sqlite"
 def _migrate(engine):
     """Add columns that don't exist yet (safe for repeated runs)."""
     insp = inspect(engine)
-    if "dilution_scores" in insp.get_table_names():
+    tables = insp.get_table_names()
+
+    if "dilution_scores" in tables:
         existing = {col["name"] for col in insp.get_columns("dilution_scores")}
         if "price_change_12m" not in existing:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE dilution_scores ADD COLUMN price_change_12m REAL"))
+
+    if "companies" in tables:
+        existing = {col["name"] for col in insp.get_columns("companies")}
+        with engine.begin() as conn:
+            if "is_spac" not in existing:
+                conn.execute(text("ALTER TABLE companies ADD COLUMN is_spac BOOLEAN DEFAULT 0"))
+            if "is_actively_trading" not in existing:
+                conn.execute(text("ALTER TABLE companies ADD COLUMN is_actively_trading BOOLEAN DEFAULT 1"))
 
 
 def _create_fts_index(engine):

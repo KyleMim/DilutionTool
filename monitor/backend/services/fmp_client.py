@@ -145,6 +145,16 @@ class FMPClient:
             return raw[0]
         return raw
 
+    def check_actively_trading(self, ticker: str) -> bool:
+        """Check if a stock is actively trading via FMP profile."""
+        try:
+            profile = self.get_company_profile(ticker)
+            if not profile or not isinstance(profile, dict):
+                return False
+            return profile.get("isActivelyTrading", False)
+        except Exception:
+            return False
+
     # ------------------------------------------------------------------ #
     # 6. Historical prices (split-adjusted)
     # ------------------------------------------------------------------ #

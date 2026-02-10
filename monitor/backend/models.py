@@ -20,6 +20,8 @@ class Company(Base):
     sector = Column(String, nullable=True)
     exchange = Column(String, nullable=True)
     market_cap = Column(Float, nullable=True)
+    is_spac = Column(Boolean, default=False)
+    is_actively_trading = Column(Boolean, default=True)
     tracking_tier = Column(String, default="inactive")  # critical | watchlist | monitoring | inactive
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

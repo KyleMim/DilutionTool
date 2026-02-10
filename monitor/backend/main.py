@@ -31,6 +31,7 @@ from backend.config import get_config, ScoringConfig
 from backend.database import SessionLocal, create_tables
 from backend.models import Company, DilutionScore, FundamentalsQuarterly, SecFiling
 from backend.services.fmp_client import FMPClient
+from backend.services.filters import is_spac_name
 from backend.api.chat import router as chat_router
 from backend.api.notes import router as notes_router
 
@@ -523,7 +524,19 @@ def retier_companies(db: Session = Depends(get_db)):
     if not scores:
         return {"message": "No scores found", "critical": 0, "watchlist": 0, "monitoring": 0}
 
-    sorted_scores = sorted(scores, key=lambda s: s.composite_score)
+    # Exclude SPACs and delisted companies
+    valid_scores = []
+    for score in scores:
+        company = db.get(Company, score.company_id)
+        if not company:
+            continue
+        if company.is_spac or not company.is_actively_trading:
+            company.tracking_tier = "inactive"
+            continue
+        valid_scores.append(score)
+    db.commit()
+
+    sorted_scores = sorted(valid_scores, key=lambda s: s.composite_score)
     n = len(sorted_scores)
     critical_idx = int(n * config.scoring.critical_percentile / 100)
     watchlist_idx = int(n * config.scoring.watchlist_percentile / 100)
@@ -551,6 +564,71 @@ def retier_companies(db: Session = Depends(get_db)):
         "critical": critical_count,
         "watchlist": watchlist_count,
         "monitoring": monitoring_count,
+    }
+
+
+@app.post("/api/admin/cleanup")
+def cleanup_companies(db: Session = Depends(get_db)):
+    """Remove SPACs and delisted/acquired companies from tracked tiers."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Step 1: Flag SPACs by name pattern
+    tracked = (
+        db.query(Company)
+        .filter(Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]))
+        .all()
+    )
+
+    spac_count = 0
+    non_spacs = []
+    for company in tracked:
+        if is_spac_name(company.name):
+            company.is_spac = True
+            company.tracking_tier = "inactive"
+            spac_count += 1
+        else:
+            non_spacs.append(company)
+    db.commit()
+    logger.info("Flagged %d SPACs as inactive", spac_count)
+
+    # Step 2: Check remaining companies via FMP profile
+    if not config.fmp_api_key:
+        return {
+            "message": f"Removed {spac_count} SPACs. FMP API key not set, skipping delisted check.",
+            "spacs_removed": spac_count,
+            "delisted_removed": 0,
+            "remaining_tracked": len(non_spacs),
+        }
+
+    fmp = FMPClient(api_key=config.fmp_api_key)
+    delisted_count = 0
+    checked = 0
+
+    for company in non_spacs:
+        try:
+            is_active = fmp.check_actively_trading(company.ticker)
+            if not is_active:
+                company.is_actively_trading = False
+                company.tracking_tier = "inactive"
+                delisted_count += 1
+                logger.info("Delisted/acquired: %s (%s)", company.ticker, company.name)
+            checked += 1
+            if checked % 100 == 0:
+                db.commit()
+                logger.info("Checked %d/%d companies (%d delisted so far)", checked, len(non_spacs), delisted_count)
+        except Exception as e:
+            logger.warning("Error checking %s: %s", company.ticker, e)
+
+    db.commit()
+    remaining = len(non_spacs) - delisted_count
+
+    return {
+        "message": f"Cleanup complete. Removed {spac_count} SPACs and {delisted_count} delisted/acquired companies.",
+        "spacs_removed": spac_count,
+        "delisted_removed": delisted_count,
+        "checked": checked,
+        "remaining_tracked": remaining,
     }
 
 

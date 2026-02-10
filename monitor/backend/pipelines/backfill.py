@@ -18,6 +18,7 @@ from backend.models import Company, FundamentalsQuarterly, SecFiling
 from backend.services.fmp_client import FMPClient, _date_to_fiscal_period
 from backend.services.edgar_client import EdgarClient
 from backend.services.scoring import score_company, score_all
+from backend.services.filters import is_spac_name
 
 logging.basicConfig(
     level=logging.INFO,
@@ -121,6 +122,11 @@ def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=300
         for i, company in enumerate(to_screen):
             if i % 50 == 0:
                 logger.info("Screening progress: %d/%d (candidates so far: %d)", i, len(to_screen), len(candidates))
+
+            # Skip SPACs
+            if is_spac_name(company.name):
+                company.is_spac = True
+                continue
 
             try:
                 income = fmp_client.get_income_statements(company.ticker, limit=8)
