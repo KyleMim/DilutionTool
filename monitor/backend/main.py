@@ -448,15 +448,34 @@ def screener(
 
 @app.get("/api/screener/sectors", response_model=List[SectorCount])
 def get_sectors(db: Session = Depends(get_db)):
+    from sqlalchemy import text as sql_text
+
+    # Query sectors (non-null)
     results = (
         db.query(Company.sector, func.count(Company.id).label("count"))
-        .filter(Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]))
+        .filter(
+            Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]),
+            Company.sector.isnot(None)
+        )
         .group_by(Company.sector)
-        .order_by(desc("count"))
         .all()
     )
 
-    return [SectorCount(sector=sector or "Other", count=count) for sector, count in results]
+    # Count null sectors separately
+    null_count = (
+        db.query(func.count(Company.id))
+        .filter(
+            Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]),
+            Company.sector.is_(None)
+        )
+        .scalar() or 0
+    )
+
+    sectors = [SectorCount(sector=sector, count=count) for sector, count in results]
+    if null_count > 0 or len(sectors) > 0:  # Include "Other" if any tracked companies exist
+        sectors.append(SectorCount(sector="Other", count=null_count))
+
+    return sorted(sectors, key=lambda s: s.count, reverse=True)
 
 
 @app.get("/api/config/thresholds")
