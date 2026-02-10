@@ -119,23 +119,19 @@ export default function CompanyDetail() {
       fcf: f.free_cash_flow,
     }));
 
-  const severityLabel =
-    (score?.composite_score ?? 0) >= 75
+  const tierLabel =
+    company.tracking_tier === "critical"
       ? "Critical"
-      : (score?.composite_score ?? 0) >= 50
-        ? "High"
-        : (score?.composite_score ?? 0) >= 25
-          ? "Moderate"
-          : "Low";
+      : company.tracking_tier === "watchlist"
+        ? "Watchlist"
+        : "Monitoring";
 
-  const severityColor =
-    severityLabel === "Critical"
+  const tierColor =
+    company.tracking_tier === "critical"
       ? "text-danger"
-      : severityLabel === "High"
+      : company.tracking_tier === "watchlist"
         ? "text-warning"
-        : severityLabel === "Moderate"
-          ? "text-accent"
-          : "text-success";
+        : "text-accent";
 
   // Full-page chat view
   if (chatOpen && chatView === "full") {
@@ -152,8 +148,8 @@ export default function CompanyDetail() {
             </svg>
           </button>
           <span className="font-mono font-bold text-gray-100">{company.ticker}</span>
-          <ScoreBadge score={score?.composite_score ?? null} size="sm" />
-          <span className={`text-xs font-semibold ${severityColor}`}>{severityLabel}</span>
+          <ScoreBadge score={score?.composite_score ?? null} tier={company.tracking_tier} size="sm" />
+          <span className={`text-xs font-semibold ${tierColor}`}>{tierLabel}</span>
           <span className="text-xs text-muted">{company.name}</span>
 
           {/* Tab switcher */}
@@ -207,9 +203,9 @@ export default function CompanyDetail() {
               <h1 className="text-2xl font-mono font-bold text-gray-100">
                 {company.ticker}
               </h1>
-              <ScoreBadge score={score?.composite_score ?? null} size="lg" />
-              <span className={`text-sm font-semibold ${severityColor}`}>
-                {severityLabel}
+              <ScoreBadge score={score?.composite_score ?? null} tier={company.tracking_tier} size="lg" />
+              <span className={`text-sm font-semibold ${tierColor}`}>
+                {tierLabel}
               </span>
             </div>
             <p className="text-muted mt-1">{company.name}</p>

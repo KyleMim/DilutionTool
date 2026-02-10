@@ -182,7 +182,7 @@ export default function Screener() {
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-right">
-                    <ScoreBadge score={c.composite_score} />
+                    <ScoreBadge score={c.composite_score} tier={c.tracking_tier} />
                   </td>
                   <td className="px-3 py-2.5 text-right font-mono text-xs">
                     <PriceChange value={c.price_change_12m} />

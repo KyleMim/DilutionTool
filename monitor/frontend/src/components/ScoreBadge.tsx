@@ -1,9 +1,10 @@
 interface ScoreBadgeProps {
   score: number | null;
+  tier?: string;
   size?: "sm" | "md" | "lg";
 }
 
-export default function ScoreBadge({ score, size = "md" }: ScoreBadgeProps) {
+export default function ScoreBadge({ score, tier, size = "md" }: ScoreBadgeProps) {
   if (score === null || score === undefined) {
     return (
       <span className="inline-flex items-center justify-center rounded bg-border/50 text-muted font-mono text-xs px-2 py-0.5">
@@ -13,13 +14,11 @@ export default function ScoreBadge({ score, size = "md" }: ScoreBadgeProps) {
   }
 
   const color =
-    score >= 75
+    tier === "critical"
       ? "bg-danger/20 text-danger border-danger/30"
-      : score >= 50
+      : tier === "watchlist"
         ? "bg-warning/20 text-warning border-warning/30"
-        : score >= 25
-          ? "bg-accent/20 text-accent border-accent/30"
-          : "bg-success/20 text-success border-success/30";
+        : "bg-accent/20 text-accent border-accent/30";
 
   const sizeClasses =
     size === "lg"
