@@ -55,9 +55,9 @@ def _migrate(engine):
         existing = {col["name"] for col in insp.get_columns("companies")}
         with engine.begin() as conn:
             if "is_spac" not in existing:
-                conn.execute(text("ALTER TABLE companies ADD COLUMN is_spac BOOLEAN DEFAULT 0"))
+                conn.execute(text("ALTER TABLE companies ADD COLUMN is_spac BOOLEAN DEFAULT FALSE"))
             if "is_actively_trading" not in existing:
-                conn.execute(text("ALTER TABLE companies ADD COLUMN is_actively_trading BOOLEAN DEFAULT 1"))
+                conn.execute(text("ALTER TABLE companies ADD COLUMN is_actively_trading BOOLEAN DEFAULT TRUE"))
 
 
 def _create_fts_index(engine):
