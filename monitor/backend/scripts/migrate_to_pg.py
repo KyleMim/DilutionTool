@@ -2,6 +2,8 @@
 Migrate data from local SQLite to PostgreSQL.
 
 Usage:
+  python -m backend.scripts.migrate_to_pg "postgresql://user:pass@host:5432/dbname"
+  or
   DATABASE_URL=postgresql://user:pass@host:5432/dbname python -m backend.scripts.migrate_to_pg
 """
 import os
@@ -23,10 +25,13 @@ def get_sqlite_engine():
     return create_engine(f"sqlite:///{db_path}", echo=False)
 
 
-def get_pg_engine():
-    database_url = os.getenv("DATABASE_URL")
+def get_pg_engine(database_url=None):
+    # Accept database_url from argument or environment variable
     if not database_url:
-        print("ERROR: DATABASE_URL not set. Set it to your PostgreSQL connection string.")
+        database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        print("ERROR: DATABASE_URL not provided.")
+        print("Usage: python -m backend.scripts.migrate_to_pg \"postgresql://user:pass@host:port/dbname\"")
         sys.exit(1)
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
@@ -45,9 +50,9 @@ TABLES = [
 ]
 
 
-def migrate():
+def migrate(database_url=None):
     sqlite_engine = get_sqlite_engine()
-    pg_engine = get_pg_engine()
+    pg_engine = get_pg_engine(database_url)
 
     sqlite_session = sessionmaker(bind=sqlite_engine)()
     pg_session = sessionmaker(bind=pg_engine)()
@@ -113,4 +118,5 @@ def migrate():
 
 
 if __name__ == "__main__":
-    migrate()
+    database_url = sys.argv[1] if len(sys.argv) > 1 else None
+    migrate(database_url)

@@ -40,6 +40,8 @@ export default function Screener() {
   const [sector, setSector] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("composite_score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 200;
 
   const statsQ = useQuery({ queryKey: ["stats"], queryFn: fetchStats });
   const sectorsQ = useQuery({ queryKey: ["sectors"], queryFn: fetchSectors });
@@ -47,7 +49,7 @@ export default function Screener() {
     queryKey: ["companies", sector],
     queryFn: () =>
       fetchCompanies({
-        limit: 200,
+        limit: 10000,
         ...(sector ? { sector } : {}),
       }),
   });
@@ -65,7 +67,11 @@ export default function Screener() {
     });
   }, [companiesQ.data, sortKey, sortDir]);
 
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
   function toggleSort(key: SortKey) {
+    setPage(0);
     if (sortKey === key) {
       setSortDir((d) => (d === "desc" ? "asc" : "desc"));
     } else {
@@ -112,7 +118,7 @@ export default function Screener() {
       {sectors && sectors.length > 0 && (
         <div className="flex gap-2 mb-4 flex-wrap">
           <button
-            onClick={() => setSector(null)}
+            onClick={() => { setSector(null); setPage(0); }}
             className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
               !sector
                 ? "bg-accent text-white"
@@ -124,7 +130,7 @@ export default function Screener() {
           {sectors.map((s) => (
             <button
               key={s.sector}
-              onClick={() => setSector(s.sector)}
+              onClick={() => { setSector(s.sector); setPage(0); }}
               className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
                 sector === s.sector
                   ? "bg-accent text-white"
@@ -175,7 +181,7 @@ export default function Screener() {
                   </td>
                 </tr>
               )}
-              {sorted.map((c) => (
+              {paged.map((c) => (
                 <tr
                   key={c.ticker}
                   onClick={() => navigate(`/company/${c.ticker}`)}
@@ -244,6 +250,31 @@ export default function Screener() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+            <span className="text-xs text-muted">
+              {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="px-3 py-1 rounded text-xs font-medium bg-surface text-muted hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Prev
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="px-3 py-1 rounded text-xs font-medium bg-surface text-muted hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
