@@ -110,32 +110,22 @@ export default function Screener() {
       {/* Pipeline explainer */}
       <PipelineExplainer />
 
-      {/* Sector tabs */}
+      {/* Sector filter */}
       {sectors && sectors.length > 0 && (
-        <div className="flex gap-2 mb-4 flex-wrap">
-          <button
-            onClick={() => { setSector(null); setPage(0); }}
-            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-              !sector
-                ? "bg-accent text-white"
-                : "bg-surface text-muted hover:text-gray-200"
-            }`}
+        <div className="mb-4">
+          <select
+            value={sector ?? ""}
+            onChange={(e) => { setSector(e.target.value || null); setPage(0); }}
+            className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-gray-100 appearance-none cursor-pointer pr-8 focus:outline-none focus:border-accent"
+            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center' }}
           >
-            All
-          </button>
-          {sectors.map((s) => (
-            <button
-              key={s.sector}
-              onClick={() => { setSector(s.sector); setPage(0); }}
-              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                sector === s.sector
-                  ? "bg-accent text-white"
-                  : "bg-surface text-muted hover:text-gray-200"
-              }`}
-            >
-              {s.sector} ({s.count})
-            </button>
-          ))}
+            <option value="">All Sectors</option>
+            {sectors.map((s) => (
+              <option key={s.sector} value={s.sector}>
+                {s.sector} ({s.count})
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
