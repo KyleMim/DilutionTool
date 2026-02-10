@@ -117,7 +117,7 @@ def score_all(db_session: Session, config: ScoringConfig) -> list[DilutionScore]
     """Score every watchlist company."""
     companies = (
         db_session.query(Company)
-        .filter(Company.tracking_tier.in_(["watchlist", "monitoring"]))
+        .filter(Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]))
         .all()
     )
     results = []

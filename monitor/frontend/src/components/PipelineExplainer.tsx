@@ -15,7 +15,7 @@ const STEPS = [
   {
     title: "Score & Rank",
     detail:
-      "After enrichment, scored using 6 weighted metrics. Score ≥25 = Watchlist, Score <25 = Monitoring, Score ≥75 = Critical.",
+      "After enrichment, scored using 6 weighted metrics. Tiered by percentile rank: top 10% = Critical, next 40% = Watchlist, bottom 50% = Monitoring.",
   },
 ];
 
@@ -43,7 +43,7 @@ export default function PipelineExplainer() {
         </svg>
         <span className="flex-1 text-left">
           <span className="text-gray-300">Method:</span>{" "}
-          Composite score (0–100) from 6 weighted metrics: Share CAGR (25%), FCF Burn (20%), Offerings (20%), SBC (15%), Runway (10%), ATM (10%)
+          Composite score (0–100) from 6 weighted metrics. Ranked by percentile: top 10% Critical, next 40% Watchlist, bottom 50% Monitoring.
         </span>
         <svg
           className={`w-3.5 h-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}

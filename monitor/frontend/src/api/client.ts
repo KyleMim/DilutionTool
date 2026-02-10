@@ -73,9 +73,9 @@ export interface CompanyDetail {
 }
 
 export interface StatsResponse {
-  total_companies: number;
-  watchlist_count: number;
   critical_count: number;
+  watchlist_count: number;
+  monitoring_count: number;
   avg_score: number | null;
   sectors: { sector: string; count: number }[];
 }

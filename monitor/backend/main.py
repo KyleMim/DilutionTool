@@ -143,9 +143,9 @@ class CompanyDetail(BaseModel):
 
 
 class StatsResponse(BaseModel):
-    total_companies: int
-    watchlist_count: int
     critical_count: int
+    watchlist_count: int
+    monitoring_count: int
     avg_score: Optional[float]
     sectors: List[dict]
 
@@ -446,7 +446,7 @@ def screener(
 def get_sectors(db: Session = Depends(get_db)):
     results = (
         db.query(Company.sector, func.count(Company.id).label("count"))
-        .filter(Company.tracking_tier.in_(["watchlist", "monitoring"]))
+        .filter(Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]))
         .filter(Company.sector.isnot(None))
         .group_by(Company.sector)
         .order_by(desc("count"))
@@ -466,7 +466,8 @@ def get_thresholds():
         "sbc_revenue_ceiling": config.scoring.sbc_revenue_ceiling,
         "offering_freq_ceiling": config.scoring.offering_freq_ceiling,
         "cash_runway_max_months": config.scoring.cash_runway_max_months,
-        "watchlist_min_score": config.scoring.watchlist_min_score,
+        "critical_percentile": config.scoring.critical_percentile,
+        "watchlist_percentile": config.scoring.watchlist_percentile,
     }
 
 
@@ -500,11 +501,12 @@ def update_weights(weights: dict):
 
 @app.get("/api/stats", response_model=StatsResponse)
 def get_stats(db: Session = Depends(get_db)):
-    total = db.query(Company).count()
+    critical = db.query(Company).filter_by(tracking_tier="critical").count()
     watchlist = db.query(Company).filter_by(tracking_tier="watchlist").count()
+    monitoring = db.query(Company).filter_by(tracking_tier="monitoring").count()
 
-    # Critical count (score >= 75)
-    critical_subq = (
+    # Average score (for companies being tracked)
+    score_subq = (
         db.query(
             DilutionScore.company_id,
             func.max(DilutionScore.id).label("max_id")
@@ -512,33 +514,25 @@ def get_stats(db: Session = Depends(get_db)):
         .group_by(DilutionScore.company_id)
         .subquery()
     )
-    critical = (
-        db.query(DilutionScore)
-        .join(critical_subq, DilutionScore.id == critical_subq.c.max_id)
-        .filter(DilutionScore.composite_score >= 75)
-        .count()
-    )
-
-    # Average score
     avg_score_result = (
         db.query(func.avg(DilutionScore.composite_score))
-        .join(critical_subq, DilutionScore.id == critical_subq.c.max_id)
+        .join(score_subq, DilutionScore.id == score_subq.c.max_id)
         .scalar()
     )
 
     # Sector breakdown
     sectors = (
         db.query(Company.sector, func.count(Company.id).label("count"))
-        .filter(Company.tracking_tier.in_(["watchlist", "monitoring"]))
+        .filter(Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]))
         .filter(Company.sector.isnot(None))
         .group_by(Company.sector)
         .all()
     )
 
     return StatsResponse(
-        total_companies=total,
-        watchlist_count=watchlist,
         critical_count=critical,
+        watchlist_count=watchlist,
+        monitoring_count=monitoring,
         avg_score=float(avg_score_result) if avg_score_result else None,
         sectors=[{"sector": s, "count": c} for s, c in sectors]
     )

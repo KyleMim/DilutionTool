@@ -41,7 +41,7 @@ export default function Screener() {
   const [sortKey, setSortKey] = useState<SortKey>("composite_score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(0);
-  const PAGE_SIZE = 200;
+  const PAGE_SIZE = 100;
 
   const statsQ = useQuery({ queryKey: ["stats"], queryFn: fetchStats });
   const sectorsQ = useQuery({ queryKey: ["sectors"], queryFn: fetchSectors });
@@ -96,13 +96,9 @@ export default function Screener() {
       {/* Stats cards */}
       {stats && (
         <div className="grid grid-cols-4 gap-4 mb-6">
-          <StatCard label="Tracked" value={stats.total_companies.toLocaleString()} />
+          <StatCard label="Critical" value={stats.critical_count.toString()} color="text-danger" />
           <StatCard label="Watchlist" value={stats.watchlist_count.toString()} color="text-warning" />
-          <StatCard
-            label="Critical"
-            value={stats.critical_count.toString()}
-            color="text-danger"
-          />
+          <StatCard label="Monitoring" value={stats.monitoring_count.toString()} color="text-gray-100" />
           <StatCard
             label="Avg Score"
             value={stats.avg_score ? stats.avg_score.toFixed(1) : "--"}

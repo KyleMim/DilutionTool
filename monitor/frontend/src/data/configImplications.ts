@@ -53,10 +53,15 @@ export function getThresholdImplication(
         ? `Companies with up to ${newVal} months of cash will now receive some runway risk score. Previously only companies under ${oldVal} months were affected. This captures more companies with moderate cash positions.`
         : `Only companies with less than ${newVal} months of cash will score on this metric (was ${oldVal}). This focuses the runway metric on companies in more immediate danger of running out of cash.`;
 
-    case "watchlist_min_score":
+    case "critical_percentile":
       return higher
-        ? `Companies need a composite score of at least ${newVal} to reach Watchlist tier (was ${oldVal}). Fewer companies will appear on the watchlist.`
-        : `Companies with a composite score of ${newVal} or higher will now be on the Watchlist (was ${oldVal}). More companies will be flagged for active monitoring.`;
+        ? `Only the top ${100 - newVal}% of scores will be Critical (was top ${100 - oldVal}%). Fewer companies flagged as critical.`
+        : `The top ${100 - newVal}% of scores will now be Critical (was top ${100 - oldVal}%). More companies flagged for immediate attention.`;
+
+    case "watchlist_percentile":
+      return higher
+        ? `Only the top ${100 - newVal}% of scores will make Watchlist (was top ${100 - oldVal}%). Fewer companies on the watchlist.`
+        : `The top ${100 - newVal}% of scores will now make Watchlist (was top ${100 - oldVal}%). More companies flagged for active monitoring.`;
 
     default:
       return null;

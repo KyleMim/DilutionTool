@@ -26,8 +26,9 @@ class ScoringConfig:
     weight_cash_runway: float = 0.10
     weight_atm_active: float = 0.10
 
-    # Tier thresholds
-    watchlist_min_score: float = 25.0
+    # Tier thresholds (percentile-based)
+    critical_percentile: float = 90.0   # Top 10% = critical
+    watchlist_percentile: float = 50.0  # Top 50% = watchlist, rest = monitoring
 
 
 @dataclass

@@ -39,7 +39,7 @@ def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=300
         # (enriched in a previous run but never scored/promoted)
         promoted = (
             db_session.query(Company)
-            .filter(Company.tracking_tier.in_(["watchlist", "monitoring"]))
+            .filter(Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]))
             .all()
         )
         enriched_inactive = (
@@ -103,11 +103,11 @@ def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=300
         to_screen = []
 
         if resume:
-            processed = [c for c in companies if c.tracking_tier in ("watchlist", "monitoring")]
+            processed = [c for c in companies if c.tracking_tier in ("critical", "watchlist", "monitoring")]
             cutoff_cap = max((c.market_cap or 0) for c in processed) if processed else 0
 
             for c in companies:
-                if c.tracking_tier in ("watchlist", "monitoring"):
+                if c.tracking_tier in ("critical", "watchlist", "monitoring"):
                     candidates.append(c)
                 elif (c.market_cap or 0) <= cutoff_cap:
                     continue
@@ -283,12 +283,21 @@ def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=300
     db_session.commit()
     logger.info("Updated 12-month price change for %d companies", price_updated)
 
-    # Promote high scorers to watchlist
+    # Assign tiers by percentile rank
+    sorted_scores = sorted(scores, key=lambda s: s.composite_score)
+    n = len(sorted_scores)
+    critical_idx = int(n * config.scoring.critical_percentile / 100)
+    watchlist_idx = int(n * config.scoring.watchlist_percentile / 100)
+
+    critical_count = 0
     watchlist_count = 0
     monitoring_count = 0
-    for score in scores:
+    for i, score in enumerate(sorted_scores):
         company = db_session.get(Company, score.company_id)
-        if score.composite_score >= config.scoring.watchlist_min_score:
+        if i >= critical_idx:
+            company.tracking_tier = "critical"
+            critical_count += 1
+        elif i >= watchlist_idx:
             company.tracking_tier = "watchlist"
             watchlist_count += 1
         else:
@@ -296,7 +305,7 @@ def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=300
             monitoring_count += 1
     db_session.commit()
 
-    logger.info("Watchlist: %d companies, Monitoring: %d companies", watchlist_count, monitoring_count)
+    logger.info("Critical: %d, Watchlist: %d, Monitoring: %d", critical_count, watchlist_count, monitoring_count)
 
     # Print top 10
     top_scores = sorted(scores, key=lambda s: s.composite_score, reverse=True)[:10]

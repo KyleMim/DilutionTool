@@ -86,13 +86,22 @@ const THRESHOLD_DEFS: {
     format: (v) => `${v} months`,
   },
   {
-    key: "watchlist_min_score",
-    label: "Watchlist Min Score",
-    desc: "Minimum composite score for watchlist",
-    min: 0,
-    max: 100,
+    key: "critical_percentile",
+    label: "Critical Percentile",
+    desc: "Top X% of scores = Critical tier",
+    min: 80,
+    max: 99,
+    step: 1,
+    format: (v) => `Top ${100 - v}%`,
+  },
+  {
+    key: "watchlist_percentile",
+    label: "Watchlist Percentile",
+    desc: "Top X% of scores = Watchlist tier (below Critical)",
+    min: 30,
+    max: 80,
     step: 5,
-    format: (v) => `${v}`,
+    format: (v) => `Top ${100 - v}%`,
   },
 ];
 
