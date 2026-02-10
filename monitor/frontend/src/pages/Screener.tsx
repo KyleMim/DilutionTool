@@ -38,6 +38,7 @@ function formatMonths(v: number | null): string {
 export default function Screener() {
   const navigate = useNavigate();
   const [sector, setSector] = useState<string | null>(null);
+  const [tier, setTier] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("composite_score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(0);
@@ -56,7 +57,14 @@ export default function Screener() {
 
   const sorted = useMemo(() => {
     if (!companiesQ.data) return [];
-    return [...companiesQ.data].sort((a, b) => {
+    let filtered = [...companiesQ.data];
+
+    // Filter by tier
+    if (tier) {
+      filtered = filtered.filter((c) => c.tracking_tier === tier);
+    }
+
+    return filtered.sort((a, b) => {
       const av = a[sortKey];
       const bv = b[sortKey];
       if (av === null || av === undefined) return 1;
@@ -65,7 +73,7 @@ export default function Screener() {
       if (typeof av === "string") return av.localeCompare(bv as string) * (sortDir === "desc" ? -1 : 1);
       return ((av as number) - (bv as number)) * (sortDir === "desc" ? -1 : 1);
     });
-  }, [companiesQ.data, sortKey, sortDir]);
+  }, [companiesQ.data, sortKey, sortDir, tier]);
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
   const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -110,9 +118,23 @@ export default function Screener() {
       {/* Pipeline explainer */}
       <PipelineExplainer />
 
-      {/* Sector filter */}
-      {sectors && sectors.length > 0 && (
-        <div className="mb-4">
+      {/* Filters */}
+      <div className="mb-4 flex gap-3">
+        {/* Tier filter */}
+        <select
+          value={tier ?? ""}
+          onChange={(e) => { setTier(e.target.value || null); setPage(0); }}
+          className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-gray-100 appearance-none cursor-pointer pr-8 focus:outline-none focus:border-accent"
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center' }}
+        >
+          <option value="">All Tiers</option>
+          <option value="critical">Critical</option>
+          <option value="watchlist">Watchlist</option>
+          <option value="monitoring">Monitoring</option>
+        </select>
+
+        {/* Sector filter */}
+        {sectors && sectors.length > 0 && (
           <select
             value={sector ?? ""}
             onChange={(e) => { setSector(e.target.value || null); setPage(0); }}
@@ -121,13 +143,13 @@ export default function Screener() {
           >
             <option value="">All Sectors</option>
             {sectors.map((s) => (
-              <option key={s.sector} value={s.sector}>
-                {s.sector} ({s.count})
+              <option key={s.sector || "other"} value={s.sector || "other"}>
+                {s.sector || "Other"} ({s.count})
               </option>
             ))}
           </select>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Table */}
       <div className="bg-surface rounded-lg border border-border overflow-hidden">
@@ -179,6 +201,9 @@ export default function Screener() {
                     </div>
                     <div className="text-xs text-muted truncate max-w-[200px]">
                       {c.name}
+                    </div>
+                    <div className="text-[10px] text-muted/70 mt-0.5">
+                      {c.sector || "Other"}
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-right">

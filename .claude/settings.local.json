@@ -7,7 +7,12 @@
       "Bash(npm install:*)",
       "Bash(python:*)",
       "Bash(pip install:*)",
-      "Bash(npx vite build:*)"
+      "Bash(npx vite build:*)",
+      "Bash(npm run build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd stock price tracking and production deployment setup\n\n## Stock Price Features\n- Added trailing 12-month price change \\(split-adjusted\\) to screener table\n- New sortable \"Price 12M\" column with color-coded display \\(green/red\\)\n- Interactive stock price chart on company detail page with 3M/6M/12M/24M toggles\n- FMP historical price API integration with auto-migration for new DB column\n- Price data fetched during backfill and stored in DilutionScore.price_change_12m\n\nFiles changed:\n- backend/services/fmp_client.py: Added get_historical_prices\\(\\) and get_price_change_12m\\(\\)\n- backend/models.py: Added price_change_12m column to DilutionScore\n- backend/database.py: Auto-migration for new column\n- backend/main.py: New /api/companies/{ticker}/prices endpoint, updated all response models\n- backend/pipelines/backfill.py: Step 4b fetches 12M price change after scoring\n- frontend/src/api/client.ts: Added PricePoint type and fetchCompanyPrices\\(\\)\n- frontend/src/pages/Screener.tsx: Added \"Price 12M\" sortable column with PriceChange component\n- frontend/src/pages/CompanyDetail.tsx: Added interactive stock price AreaChart\n\n## Production Deployment\n- FastAPI now serves built React app from frontend/dist\n- Added render.yaml for one-click Render deployment\n- Updated Makefile: added build and prod targets\n- Updated frontend API client to use relative URLs in production\n- Added DEPLOY.md with comprehensive deployment guide \\(Render, Railway, self-hosted\\)\n- Added test_prod.py for local production testing\n- Updated requirements.txt with gunicorn for production ASGI server\n- Updated README with deployment info and links to DEPLOY.md\n\nThe app is now ready for production deployment on Render or any web service.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

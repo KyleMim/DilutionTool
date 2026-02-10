@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nImprove KPI dashboard and sector filtering\n\n- Simplify KPI cards: remove meaningless total company count, show Monitoring/Watchlist/Avg Score\n- Add critical_count to stats API \\(three-tier system: critical, watchlist, monitoring\\)\n- Replace sector button tabs with dropdown select for cleaner UI\n- Reduce screener page size from 200 to 100 companies\n\nCo-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)"
+    ]
+  }
+}

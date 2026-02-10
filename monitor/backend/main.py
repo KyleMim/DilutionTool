@@ -195,7 +195,10 @@ def list_companies(
 
     # Filters
     if sector:
-        query = query.filter(Company.sector == sector)
+        if sector.lower() == "other":
+            query = query.filter(Company.sector.is_(None))
+        else:
+            query = query.filter(Company.sector == sector)
     if tier:
         query = query.filter(Company.tracking_tier == tier)
     if min_score is not None:
@@ -447,13 +450,12 @@ def get_sectors(db: Session = Depends(get_db)):
     results = (
         db.query(Company.sector, func.count(Company.id).label("count"))
         .filter(Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]))
-        .filter(Company.sector.isnot(None))
         .group_by(Company.sector)
         .order_by(desc("count"))
         .all()
     )
 
-    return [SectorCount(sector=sector, count=count) for sector, count in results]
+    return [SectorCount(sector=sector or "Other", count=count) for sector, count in results]
 
 
 @app.get("/api/config/thresholds")
@@ -577,7 +579,6 @@ def get_stats(db: Session = Depends(get_db)):
     sectors = (
         db.query(Company.sector, func.count(Company.id).label("count"))
         .filter(Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]))
-        .filter(Company.sector.isnot(None))
         .group_by(Company.sector)
         .all()
     )
@@ -587,7 +588,7 @@ def get_stats(db: Session = Depends(get_db)):
         watchlist_count=watchlist,
         monitoring_count=monitoring,
         avg_score=float(avg_score_result) if avg_score_result else None,
-        sectors=[{"sector": s, "count": c} for s, c in sectors]
+        sectors=[{"sector": s or "Other", "count": c} for s, c in sectors]
     )
 
 
