@@ -37,7 +37,7 @@ export interface CompanyListItem {
   price_change_12m: number | null;
 }
 
-export interface FundamentalsItem {
+export interface FinancialsItem {
   fiscal_period: string;
   shares_outstanding_diluted: number | null;
   free_cash_flow: number | null;
@@ -69,7 +69,7 @@ export interface CompanyDetail {
   market_cap: number | null;
   tracking_tier: string;
   score: CompanyListItem | null;
-  fundamentals: FundamentalsItem[];
+  financials: FinancialsItem[];
 }
 
 export interface StatsResponse {
@@ -86,7 +86,7 @@ export interface SectorCount {
 }
 
 export interface HistoryResponse {
-  fundamentals: FundamentalsItem[];
+  financials: FinancialsItem[];
   scores: CompanyListItem[];
 }
 

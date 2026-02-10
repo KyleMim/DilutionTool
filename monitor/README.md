@@ -71,7 +71,7 @@ This is a portfolio/demo version. The backend is a single-process FastAPI server
 
 ## Data Sources
 
-- **Financial Modeling Prep (FMP):** Fundamentals, share counts, market cap, income/cashflow/balance sheet data
+- **Financial Modeling Prep (FMP):** Financials, share counts, market cap, income/cashflow/balance sheet data
 - **SEC EDGAR:** Company CIK lookup, recent filings (S-3, 424B5, 8-K), filing text classification for dilution events
 
 ## Quick Start
@@ -126,7 +126,7 @@ FastAPI auto-generates interactive docs at [http://localhost:8000/docs](http://l
 | Endpoint | Description |
 |---|---|
 | `GET /api/companies` | List companies with scores, filters, sorting, pagination |
-| `GET /api/companies/{ticker}` | Company detail with score breakdown + fundamentals |
+| `GET /api/companies/{ticker}` | Company detail with score breakdown + financials |
 | `GET /api/companies/{ticker}/history` | Time series data for charts |
 | `GET /api/companies/{ticker}/filings` | SEC filings for a company |
 | `GET /api/companies/{ticker}/prices?months=12` | Trailing split-adjusted daily prices (via FMP) |

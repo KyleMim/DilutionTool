@@ -105,7 +105,7 @@ class PricePoint(BaseModel):
     volume: Optional[int]
 
 
-class FundamentalsItem(BaseModel):
+class FinancialsItem(BaseModel):
     fiscal_period: str
     shares_outstanding_diluted: Optional[float]
     free_cash_flow: Optional[float]
@@ -137,7 +137,7 @@ class CompanyDetail(BaseModel):
     market_cap: Optional[float]
     tracking_tier: str
     score: Optional[CompanyListItem]
-    fundamentals: List[FundamentalsItem]
+    financials: List[FinancialsItem]
 
     class Config:
         from_attributes = True
@@ -297,7 +297,7 @@ def get_company(ticker: str, db: Session = Depends(get_db)):
         "market_cap": company.market_cap,
         "tracking_tier": company.tracking_tier,
         "score": score_data,
-        "fundamentals": [FundamentalsItem.from_orm(f) for f in fundamentals]
+        "financials": [FinancialsItem.from_orm(f) for f in fundamentals]
     }
 
 
@@ -322,7 +322,7 @@ def get_company_history(ticker: str, db: Session = Depends(get_db)):
     )
 
     return {
-        "fundamentals": [FundamentalsItem.from_orm(f) for f in fundamentals],
+        "financials": [FinancialsItem.from_orm(f) for f in fundamentals],
         "scores": [CompanyListItem(
             ticker=company.ticker,
             name=company.name,

@@ -103,7 +103,7 @@ export default function CompanyDetail() {
   const filings = filingsQ.data;
 
   // Chart data (chronological)
-  const sharesData = (history?.fundamentals ?? company.fundamentals)
+  const sharesData = (history?.financials ?? company.financials)
     .slice()
     .sort((a, b) => a.fiscal_period.localeCompare(b.fiscal_period))
     .map((f) => ({
@@ -111,7 +111,7 @@ export default function CompanyDetail() {
       shares: f.shares_outstanding_diluted,
     }));
 
-  const fcfData = (history?.fundamentals ?? company.fundamentals)
+  const fcfData = (history?.financials ?? company.financials)
     .slice()
     .sort((a, b) => a.fiscal_period.localeCompare(b.fiscal_period))
     .map((f) => ({

@@ -10,7 +10,7 @@ const STEPS = [
   {
     title: "Enrich",
     detail:
-      "Qualified candidates enriched with 12 quarters of fundamentals (shares, FCF, SBC, revenue, cash) + SEC filings (ATM, offerings, convertibles).",
+      "Qualified candidates enriched with 12 quarters of financials (shares, FCF, SBC, revenue, cash) + SEC filings (ATM, offerings, convertibles).",
   },
   {
     title: "Score & Rank",
