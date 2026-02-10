@@ -3,28 +3,19 @@ import { Link } from "react-router-dom";
 
 const STEPS = [
   {
-    title: "Universe Pull",
-    summary: "All US equities from FMP",
+    title: "Screen",
     detail:
-      "Fetches the full list of US-listed equities from the Financial Modeling Prep API. Every company with a market cap greater than $0 is included as a starting point.",
-  },
-  {
-    title: "Quick Screen",
-    summary: "8Q fundamentals check",
-    detail:
-      "Each company's last 8 quarters of fundamentals are fetched and checked against qualification criteria. A company qualifies as a candidate if its 3-year share CAGR exceeds the minimum threshold (default 5%) OR it has enough quarters of negative free cash flow (default 4 of 8).",
+      "Any public company with 3-year share CAGR >5% OR 4+ quarters of negative FCF qualifies as a candidate.",
   },
   {
     title: "Enrich",
-    summary: "Full data + SEC filings",
     detail:
-      "Qualified candidates get full data: 12 quarters of fundamentals from FMP (shares, FCF, SBC, revenue, cash) plus SEC filings from EDGAR. Filings are classified by dilution type: ATM programs, registered direct offerings, follow-on offerings, convertible debt, and PIPEs.",
+      "Qualified candidates enriched with 12 quarters of fundamentals (shares, FCF, SBC, revenue, cash) + SEC filings (ATM, offerings, convertibles).",
   },
   {
     title: "Score & Rank",
-    summary: "6 sub-scores \u2192 composite",
     detail:
-      "Each candidate receives a composite dilution score (0\u2013100) computed as a weighted average of 6 sub-scores: Share CAGR (25%), FCF Burn (20%), Offering Frequency (20%), SBC/Revenue (15%), Cash Runway (10%), ATM Active (10%). Companies scoring above the watchlist threshold (default 25) are placed on the Watchlist; others go to Monitoring. Scores \u2265 75 are flagged Critical.",
+      "After enrichment, scored using 6 weighted metrics. Score ≥25 = Watchlist, Score <25 = Monitoring, Score ≥75 = Critical.",
   },
 ];
 
@@ -51,15 +42,8 @@ export default function PipelineExplainer() {
           />
         </svg>
         <span className="flex-1 text-left">
-          <span className="text-gray-300">How we find companies:</span>{" "}
-          {STEPS.map((s, i) => (
-            <span key={i}>
-              {i > 0 && (
-                <span className="text-muted mx-1">{"\u2192"}</span>
-              )}
-              {s.title}
-            </span>
-          ))}
+          <span className="text-gray-300">Method:</span>{" "}
+          Composite score (0–100) from 6 weighted metrics: Share CAGR (25%), FCF Burn (20%), Offerings (20%), SBC (15%), Runway (10%), ATM (10%)
         </span>
         <svg
           className={`w-3.5 h-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}
