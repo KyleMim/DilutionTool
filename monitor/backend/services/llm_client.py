@@ -298,13 +298,18 @@ TOOLS = [
     },
     {
         "name": "screen_companies",
-        "description": "Search our tracked companies by criteria like sector, score range, or tier. Returns a ranked table. Use this to find companies matching specific dilution characteristics.",
+        "description": "Search and filter tracked companies by any combination of metrics. Returns a ranked table with key stats. Use this for questions like 'find companies with high price appreciation and high share growth' or 'most dilutive biotech stocks'.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "sector": {
                     "type": "string",
                     "description": "Filter by sector (e.g. 'Technology', 'Healthcare')"
+                },
+                "tier": {
+                    "type": "string",
+                    "enum": ["critical", "watchlist", "monitoring"],
+                    "description": "Filter by tracking tier"
                 },
                 "min_score": {
                     "type": "number",
@@ -314,15 +319,56 @@ TOOLS = [
                     "type": "number",
                     "description": "Maximum composite dilution score (0-100)"
                 },
-                "tier": {
-                    "type": "string",
-                    "enum": ["critical", "watchlist", "monitoring"],
-                    "description": "Filter by tracking tier"
+                "min_share_cagr": {
+                    "type": "number",
+                    "description": "Minimum 3-year share CAGR (decimal, e.g. 0.10 = 10%)"
+                },
+                "max_share_cagr": {
+                    "type": "number",
+                    "description": "Maximum 3-year share CAGR (decimal)"
+                },
+                "min_price_change": {
+                    "type": "number",
+                    "description": "Minimum 12-month price change (decimal, e.g. 0.50 = +50%)"
+                },
+                "max_price_change": {
+                    "type": "number",
+                    "description": "Maximum 12-month price change (decimal)"
+                },
+                "min_fcf_burn": {
+                    "type": "number",
+                    "description": "Minimum FCF burn rate (decimal, negative = burning cash)"
+                },
+                "max_fcf_burn": {
+                    "type": "number",
+                    "description": "Maximum FCF burn rate (decimal)"
+                },
+                "min_sbc_revenue": {
+                    "type": "number",
+                    "description": "Minimum SBC/revenue ratio (decimal, e.g. 0.20 = 20%)"
+                },
+                "max_sbc_revenue": {
+                    "type": "number",
+                    "description": "Maximum SBC/revenue ratio (decimal)"
+                },
+                "min_cash_runway": {
+                    "type": "number",
+                    "description": "Minimum cash runway in months"
+                },
+                "max_cash_runway": {
+                    "type": "number",
+                    "description": "Maximum cash runway in months"
                 },
                 "sort_by": {
                     "type": "string",
-                    "description": "Column to sort by (default: composite_score). Options: composite_score, share_cagr_score, fcf_burn_score, sbc_revenue_score, offering_freq_score, cash_runway_score",
+                    "description": "Column to sort by. Options: composite_score, share_cagr_3y, price_change_12m, fcf_burn_rate, sbc_revenue_pct, cash_runway_months, offering_count_3y, share_cagr_score, fcf_burn_score, sbc_revenue_score, offering_freq_score, cash_runway_score. Default: composite_score",
                     "default": "composite_score"
+                },
+                "sort_dir": {
+                    "type": "string",
+                    "enum": ["desc", "asc"],
+                    "description": "Sort direction (default: desc)",
+                    "default": "desc"
                 },
                 "limit": {
                     "type": "integer",
@@ -448,10 +494,21 @@ def execute_tool(tool_name: str, tool_input: dict, db: Session, fmp_api_key: str
             return _tool_screen_companies(
                 db,
                 sector=tool_input.get("sector"),
+                tier=tool_input.get("tier"),
                 min_score=tool_input.get("min_score"),
                 max_score=tool_input.get("max_score"),
-                tier=tool_input.get("tier"),
+                min_share_cagr=tool_input.get("min_share_cagr"),
+                max_share_cagr=tool_input.get("max_share_cagr"),
+                min_price_change=tool_input.get("min_price_change"),
+                max_price_change=tool_input.get("max_price_change"),
+                min_fcf_burn=tool_input.get("min_fcf_burn"),
+                max_fcf_burn=tool_input.get("max_fcf_burn"),
+                min_sbc_revenue=tool_input.get("min_sbc_revenue"),
+                max_sbc_revenue=tool_input.get("max_sbc_revenue"),
+                min_cash_runway=tool_input.get("min_cash_runway"),
+                max_cash_runway=tool_input.get("max_cash_runway"),
                 sort_by=tool_input.get("sort_by", "composite_score"),
+                sort_dir=tool_input.get("sort_dir", "desc"),
                 limit=tool_input.get("limit", 10),
             )
         elif tool_name == "lookup_sec_filings":
@@ -744,10 +801,21 @@ def _tool_update_note(db: Session, note_id: int, title: str, content: str) -> st
 def _tool_screen_companies(
     db: Session,
     sector: str = None,
+    tier: str = None,
     min_score: float = None,
     max_score: float = None,
-    tier: str = None,
+    min_share_cagr: float = None,
+    max_share_cagr: float = None,
+    min_price_change: float = None,
+    max_price_change: float = None,
+    min_fcf_burn: float = None,
+    max_fcf_burn: float = None,
+    min_sbc_revenue: float = None,
+    max_sbc_revenue: float = None,
+    min_cash_runway: float = None,
+    max_cash_runway: float = None,
     sort_by: str = "composite_score",
+    sort_dir: str = "desc",
     limit: int = 10,
 ) -> str:
     limit = min(limit, 25)
@@ -768,6 +836,7 @@ def _tool_screen_companies(
         .filter(Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]))
     )
 
+    # Category filters
     if sector:
         if sector.lower() == "other":
             query = query.filter(Company.sector.is_(None))
@@ -775,13 +844,39 @@ def _tool_screen_companies(
             query = query.filter(Company.sector == sector)
     if tier:
         query = query.filter(Company.tracking_tier == tier)
+
+    # Metric filters
     if min_score is not None:
         query = query.filter(DilutionScore.composite_score >= min_score)
     if max_score is not None:
         query = query.filter(DilutionScore.composite_score <= max_score)
+    if min_share_cagr is not None:
+        query = query.filter(DilutionScore.share_cagr_3y >= min_share_cagr)
+    if max_share_cagr is not None:
+        query = query.filter(DilutionScore.share_cagr_3y <= max_share_cagr)
+    if min_price_change is not None:
+        query = query.filter(DilutionScore.price_change_12m >= min_price_change)
+    if max_price_change is not None:
+        query = query.filter(DilutionScore.price_change_12m <= max_price_change)
+    if min_fcf_burn is not None:
+        query = query.filter(DilutionScore.fcf_burn_rate >= min_fcf_burn)
+    if max_fcf_burn is not None:
+        query = query.filter(DilutionScore.fcf_burn_rate <= max_fcf_burn)
+    if min_sbc_revenue is not None:
+        query = query.filter(DilutionScore.sbc_revenue_pct >= min_sbc_revenue)
+    if max_sbc_revenue is not None:
+        query = query.filter(DilutionScore.sbc_revenue_pct <= max_sbc_revenue)
+    if min_cash_runway is not None:
+        query = query.filter(DilutionScore.cash_runway_months >= min_cash_runway)
+    if max_cash_runway is not None:
+        query = query.filter(DilutionScore.cash_runway_months <= max_cash_runway)
 
+    # Sorting
     sort_col = getattr(DilutionScore, sort_by, DilutionScore.composite_score)
-    query = query.order_by(desc(sort_col))
+    if sort_dir == "asc":
+        query = query.order_by(sort_col)
+    else:
+        query = query.order_by(desc(sort_col))
 
     results = query.limit(limit).all()
 
@@ -789,13 +884,16 @@ def _tool_screen_companies(
         return "No companies found matching those criteria."
 
     result = f"## Screener Results ({len(results)} companies)\n\n"
-    result += "| Ticker | Name | Sector | Score | Tier |\n"
-    result += "|--------|------|--------|-------|------|\n"
+    result += "| Ticker | Name | Score | Share CAGR 3Y | 12M Price Chg | SBC/Rev | Runway (mo) | Tier |\n"
+    result += "|--------|------|-------|---------------|---------------|---------|-------------|------|\n"
     for company, score in results:
         result += (
             f"| {company.ticker} | {company.name} "
-            f"| {company.sector or 'Other'} "
             f"| {score.composite_score:.1f} "
+            f"| {_fmt_pct(score.share_cagr_3y)} "
+            f"| {_fmt_pct(score.price_change_12m)} "
+            f"| {_fmt_pct(score.sbc_revenue_pct)} "
+            f"| {_safe_months(score.cash_runway_months)} "
             f"| {company.tracking_tier} |\n"
         )
     return result
@@ -1127,7 +1225,7 @@ class LLMClient:
         - {"type": "done", "content": "..."} — final complete response
         """
         current_messages = list(messages)
-        max_tool_rounds = 5  # prevent infinite loops
+        max_tool_rounds = 15  # prevent infinite loops
 
         # Combine custom tools with Anthropic's server-side web search
         all_tools = TOOLS + [{"type": "web_search_20250305", "name": "web_search"}]
