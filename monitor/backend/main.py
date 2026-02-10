@@ -499,6 +499,59 @@ def update_weights(weights: dict):
     return get_weights()
 
 
+@app.post("/api/admin/retier")
+def retier_companies(db: Session = Depends(get_db)):
+    """Re-assign tracking tiers based on percentile ranking of composite scores."""
+    # Get latest score per company
+    latest_scores_sq = (
+        db.query(
+            DilutionScore.company_id,
+            func.max(DilutionScore.id).label("max_id")
+        )
+        .group_by(DilutionScore.company_id)
+        .subquery()
+    )
+
+    scores = (
+        db.query(DilutionScore)
+        .join(latest_scores_sq, DilutionScore.id == latest_scores_sq.c.max_id)
+        .all()
+    )
+
+    if not scores:
+        return {"message": "No scores found", "critical": 0, "watchlist": 0, "monitoring": 0}
+
+    sorted_scores = sorted(scores, key=lambda s: s.composite_score)
+    n = len(sorted_scores)
+    critical_idx = int(n * config.scoring.critical_percentile / 100)
+    watchlist_idx = int(n * config.scoring.watchlist_percentile / 100)
+
+    critical_count = 0
+    watchlist_count = 0
+    monitoring_count = 0
+    for i, score in enumerate(sorted_scores):
+        company = db.get(Company, score.company_id)
+        if not company:
+            continue
+        if i >= critical_idx:
+            company.tracking_tier = "critical"
+            critical_count += 1
+        elif i >= watchlist_idx:
+            company.tracking_tier = "watchlist"
+            watchlist_count += 1
+        else:
+            company.tracking_tier = "monitoring"
+            monitoring_count += 1
+    db.commit()
+
+    return {
+        "message": f"Re-tiered {n} companies",
+        "critical": critical_count,
+        "watchlist": watchlist_count,
+        "monitoring": monitoring_count,
+    }
+
+
 @app.get("/api/stats", response_model=StatsResponse)
 def get_stats(db: Session = Depends(get_db)):
     critical = db.query(Company).filter_by(tracking_tier="critical").count()
