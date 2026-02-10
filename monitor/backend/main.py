@@ -606,13 +606,12 @@ def cleanup_companies(db: Session = Depends(get_db)):
     non_spacs = []
     for company in tracked:
         if is_spac_name(company.name):
-            company.is_spac = True
-            company.tracking_tier = "inactive"
+            db.delete(company)
             spac_count += 1
         else:
             non_spacs.append(company)
     db.commit()
-    logger.info("Flagged %d SPACs as inactive", spac_count)
+    logger.info("Deleted %d SPACs", spac_count)
 
     # Step 2: Check remaining companies via FMP profile
     if not config.fmp_api_key:
@@ -631,8 +630,7 @@ def cleanup_companies(db: Session = Depends(get_db)):
         try:
             is_active = fmp.check_actively_trading(company.ticker)
             if not is_active:
-                company.is_actively_trading = False
-                company.tracking_tier = "inactive"
+                db.delete(company)
                 delisted_count += 1
                 logger.info("Delisted/acquired: %s (%s)", company.ticker, company.name)
             checked += 1
@@ -652,6 +650,17 @@ def cleanup_companies(db: Session = Depends(get_db)):
         "checked": checked,
         "remaining_tracked": remaining,
     }
+
+
+@app.post("/api/admin/purge-inactive")
+def purge_inactive(db: Session = Depends(get_db)):
+    """Delete all inactive companies and their related data."""
+    inactive = db.query(Company).filter_by(tracking_tier="inactive").all()
+    count = len(inactive)
+    for company in inactive:
+        db.delete(company)
+    db.commit()
+    return {"message": f"Deleted {count} inactive companies", "deleted": count}
 
 
 @app.get("/api/stats", response_model=StatsResponse)
