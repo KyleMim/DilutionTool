@@ -624,7 +624,7 @@ class LLMClient:
         max_tool_rounds = 5  # prevent infinite loops
 
         # Combine custom tools with Anthropic's server-side web search
-        all_tools = TOOLS + [{"type": "web_search_20250305"}]
+        all_tools = TOOLS + [{"type": "web_search_20250305", "name": "web_search"}]
 
         for _round in range(max_tool_rounds):
             # Call Claude (non-streaming to detect tool use)
