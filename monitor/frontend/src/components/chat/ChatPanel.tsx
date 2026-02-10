@@ -13,6 +13,8 @@ interface Props {
   currentView?: "panel" | "full";
   showViewToggle?: boolean;
   className?: string;
+  onFullscreen?: () => void;
+  isFullscreen?: boolean;
 }
 
 export default function ChatPanel({
@@ -22,6 +24,8 @@ export default function ChatPanel({
   currentView,
   showViewToggle,
   className,
+  onFullscreen,
+  isFullscreen,
 }: Props) {
   const {
     conversation,
@@ -90,6 +94,8 @@ export default function ChatPanel({
         currentView={currentView}
         showViewToggle={showViewToggle}
         isSaving={saveNote.isPending || generateMemo.isPending}
+        onFullscreen={onFullscreen}
+        isFullscreen={isFullscreen}
       />
 
       {/* Status toast */}
