@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import desc, text
 from sqlalchemy.orm import Session
 
-from backend.database import SessionLocal
+from backend.database import SessionLocal, is_sqlite
 from backend.models import Note, Conversation, Message
 from backend.config import get_config
 from backend.services.llm_client import LLMClient, build_company_context
@@ -223,7 +223,9 @@ def generate_memo_from_conversation(
 
 
 def _fts_upsert(db: Session, note: Note):
-    """Insert or update the FTS index for a note."""
+    """Insert or update the FTS index for a note (SQLite only)."""
+    if not is_sqlite():
+        return
     db.execute(text("DELETE FROM notes_fts WHERE rowid = :id"), {"id": note.id})
     db.execute(
         text(
@@ -241,7 +243,9 @@ def _fts_upsert(db: Session, note: Note):
 
 
 def _fts_delete(db: Session, note_id: int):
-    """Remove a note from the FTS index."""
+    """Remove a note from the FTS index (SQLite only)."""
+    if not is_sqlite():
+        return
     db.execute(text("DELETE FROM notes_fts WHERE rowid = :id"), {"id": note_id})
 
 

@@ -392,7 +392,7 @@ def _tool_search_notes(db: Session, query: str = None, ticker: str = None, note_
     PREVIEW_LENGTH = 400
 
     if query and query.strip():
-        # Use FTS5 full-text search
+        from backend.database import is_sqlite
         params = {"query": query.strip()}
         where_clauses = []
         if ticker:
@@ -404,19 +404,37 @@ def _tool_search_notes(db: Session, query: str = None, ticker: str = None, note_
 
         extra_where = (" AND " + " AND ".join(where_clauses)) if where_clauses else ""
 
-        rows = db.execute(
-            sql_text(f"""
-                SELECT n.id, n.title, n.note_type, n.ticker, n.updated_at,
-                       SUBSTR(n.content, 1, :preview_len) as preview,
-                       LENGTH(n.content) as content_length
-                FROM notes_fts fts
-                JOIN notes n ON n.id = fts.rowid
-                WHERE notes_fts MATCH :query{extra_where}
-                ORDER BY rank
-                LIMIT 10
-            """),
-            {**params, "preview_len": PREVIEW_LENGTH},
-        ).fetchall()
+        if is_sqlite():
+            # Use FTS5 full-text search on SQLite
+            rows = db.execute(
+                sql_text(f"""
+                    SELECT n.id, n.title, n.note_type, n.ticker, n.updated_at,
+                           SUBSTR(n.content, 1, :preview_len) as preview,
+                           LENGTH(n.content) as content_length
+                    FROM notes_fts fts
+                    JOIN notes n ON n.id = fts.rowid
+                    WHERE notes_fts MATCH :query{extra_where}
+                    ORDER BY rank
+                    LIMIT 10
+                """),
+                {**params, "preview_len": PREVIEW_LENGTH},
+            ).fetchall()
+        else:
+            # Use ILIKE on PostgreSQL
+            like_param = f"%{query.strip()}%"
+            params["like_query"] = like_param
+            rows = db.execute(
+                sql_text(f"""
+                    SELECT n.id, n.title, n.note_type, n.ticker, n.updated_at,
+                           SUBSTRING(n.content FROM 1 FOR :preview_len) as preview,
+                           LENGTH(n.content) as content_length
+                    FROM notes n
+                    WHERE (n.title ILIKE :like_query OR n.content ILIKE :like_query){extra_where}
+                    ORDER BY n.updated_at DESC
+                    LIMIT 10
+                """),
+                {**params, "preview_len": PREVIEW_LENGTH},
+            ).fetchall()
     else:
         # No query — list recent notes
         orm_query = db.query(Note)

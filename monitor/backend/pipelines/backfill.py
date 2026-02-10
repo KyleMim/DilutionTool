@@ -12,8 +12,6 @@ import time
 from datetime import date, timedelta
 
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
-
 from backend.config import get_config
 from backend.database import SessionLocal, create_tables
 from backend.models import Company, FundamentalsQuarterly, SecFiling
@@ -29,96 +27,137 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=3000, quick_mode=False, resume=False):
+def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=3000, quick_mode=False, resume=False, enrich_only=False):
     """Main backfill pipeline."""
 
-    # ------------------------------------------------------------------ #
-    # Step 1: Pull universe
-    # ------------------------------------------------------------------ #
-    logger.info("Step 1: Pulling stock universe from FMP...")
-    stock_list = fmp_client.get_stock_list()
-
-    # Filter: market_cap > 0
-    stock_list = [s for s in stock_list if s.get("market_cap") and s["market_cap"] > 0]
-    logger.info("Loaded %d US equities with market cap > 0", len(stock_list))
-
-    # Insert/update into companies table
-    for stock in stock_list:
-        existing = db_session.query(Company).filter_by(ticker=stock["ticker"]).first()
-        if existing:
-            existing.name = stock["name"] or existing.name
-            existing.sector = stock["sector"] or existing.sector
-            existing.exchange = stock["exchange"] or existing.exchange
-            existing.market_cap = stock["market_cap"]
-        else:
-            db_session.add(Company(
-                ticker=stock["ticker"],
-                name=stock["name"] or stock["ticker"],
-                sector=stock.get("sector"),
-                exchange=stock.get("exchange"),
-                market_cap=stock["market_cap"],
-                tracking_tier="inactive",
-            ))
-    db_session.commit()
-    logger.info("Universe synced to database")
-
-    # ------------------------------------------------------------------ #
-    # Step 2: Quick screen
-    # ------------------------------------------------------------------ #
-    logger.info("Step 2: Quick screening for dilution candidates...")
-    companies = db_session.query(Company).order_by(Company.market_cap.asc()).all()
-
-    if quick_mode:
-        companies = companies[:min(max_companies, 500)]
-        logger.info("Quick mode: screening %d companies", len(companies))
-    else:
-        companies = companies[:max_companies]
-
-    candidates = []
-    screened = 0
-
-    for i, company in enumerate(companies):
-        if i % 50 == 0:
-            logger.info("Screening progress: %d/%d (candidates so far: %d)", i, len(companies), len(candidates))
-
-        try:
-            income = fmp_client.get_income_statements(company.ticker, limit=8)
-            cashflow = fmp_client.get_cashflow_statements(company.ticker, limit=8)
-
-            # Calculate rough share CAGR
-            shares = [
-                r["shares_outstanding_diluted"] for r in income
-                if r.get("shares_outstanding_diluted") and r["shares_outstanding_diluted"] > 0
-            ]
-
-            is_candidate = False
-
-            if len(shares) >= 2:
-                oldest = shares[-1]  # income comes newest-first from FMP
-                newest = shares[0]
-                num_q = len(shares) - 1
-                if oldest > 0 and num_q > 0:
-                    cagr = (newest / oldest) ** (4 / num_q) - 1
-                    if cagr > config.scoring.share_cagr_min:
-                        is_candidate = True
-
-            # Count negative FCF quarters
-            neg_fcf = sum(
-                1 for r in cashflow
-                if r.get("free_cash_flow") is not None and r["free_cash_flow"] < 0
+    if enrich_only:
+        # ------------------------------------------------------------------ #
+        # Enrich-only mode: skip Steps 1 & 2 entirely
+        # ------------------------------------------------------------------ #
+        logger.info("Enrich-only mode: skipping screening, loading existing candidates...")
+        # Include already-promoted companies AND inactive ones that have fundamentals
+        # (enriched in a previous run but never scored/promoted)
+        promoted = (
+            db_session.query(Company)
+            .filter(Company.tracking_tier.in_(["watchlist", "monitoring"]))
+            .all()
+        )
+        enriched_inactive = (
+            db_session.query(Company)
+            .filter(
+                Company.tracking_tier == "inactive",
+                Company.id.in_(
+                    db_session.query(FundamentalsQuarterly.company_id).distinct()
+                ),
             )
-            if neg_fcf >= config.scoring.fcf_negative_quarters:
-                is_candidate = True
+            .all()
+        )
+        candidates = promoted + enriched_inactive
+        logger.info("Found %d candidates (%d promoted + %d enriched-inactive)",
+                     len(candidates), len(promoted), len(enriched_inactive))
+    else:
+        # ------------------------------------------------------------------ #
+        # Step 1: Pull universe
+        # ------------------------------------------------------------------ #
+        logger.info("Step 1: Pulling stock universe from FMP...")
+        stock_list = fmp_client.get_stock_list()
 
-            if is_candidate:
-                candidates.append(company)
+        # Filter: market_cap > 0
+        stock_list = [s for s in stock_list if s.get("market_cap") and s["market_cap"] > 0]
+        logger.info("Loaded %d US equities with market cap > 0", len(stock_list))
 
-        except Exception as e:
-            logger.warning("Error screening %s: %s", company.ticker, e)
+        # Insert/update into companies table
+        for stock in stock_list:
+            existing = db_session.query(Company).filter_by(ticker=stock["ticker"]).first()
+            if existing:
+                existing.name = stock["name"] or existing.name
+                existing.sector = stock["sector"] or existing.sector
+                existing.exchange = stock["exchange"] or existing.exchange
+                existing.market_cap = stock["market_cap"]
+            else:
+                db_session.add(Company(
+                    ticker=stock["ticker"],
+                    name=stock["name"] or stock["ticker"],
+                    sector=stock.get("sector"),
+                    exchange=stock.get("exchange"),
+                    market_cap=stock["market_cap"],
+                    tracking_tier="inactive",
+                ))
+        db_session.commit()
+        logger.info("Universe synced to database")
 
-        screened += 1
+        # ------------------------------------------------------------------ #
+        # Step 2: Quick screen
+        # ------------------------------------------------------------------ #
+        logger.info("Step 2: Quick screening for dilution candidates...")
+        companies = db_session.query(Company).order_by(Company.market_cap.asc()).all()
 
-    logger.info("Screened %d companies, %d candidates identified", screened, len(candidates))
+        if quick_mode:
+            companies = companies[:min(max_companies, 500)]
+            logger.info("Quick mode: screening %d companies", len(companies))
+        else:
+            companies = companies[:max_companies]
+
+        candidates = []
+        screened = 0
+        to_screen = []
+
+        if resume:
+            processed = [c for c in companies if c.tracking_tier in ("watchlist", "monitoring")]
+            cutoff_cap = max((c.market_cap or 0) for c in processed) if processed else 0
+
+            for c in companies:
+                if c.tracking_tier in ("watchlist", "monitoring"):
+                    candidates.append(c)
+                elif (c.market_cap or 0) <= cutoff_cap:
+                    continue
+                else:
+                    to_screen.append(c)
+            logger.info("Resume: %d already processed, %d already screened (skipped), %d new to screen",
+                         len(candidates), len(companies) - len(candidates) - len(to_screen), len(to_screen))
+        else:
+            to_screen = companies
+
+        for i, company in enumerate(to_screen):
+            if i % 50 == 0:
+                logger.info("Screening progress: %d/%d (candidates so far: %d)", i, len(to_screen), len(candidates))
+
+            try:
+                income = fmp_client.get_income_statements(company.ticker, limit=8)
+                cashflow = fmp_client.get_cashflow_statements(company.ticker, limit=8)
+
+                shares = [
+                    r["shares_outstanding_diluted"] for r in income
+                    if r.get("shares_outstanding_diluted") and r["shares_outstanding_diluted"] > 0
+                ]
+
+                is_candidate = False
+
+                if len(shares) >= 2:
+                    oldest = shares[-1]
+                    newest = shares[0]
+                    num_q = len(shares) - 1
+                    if oldest > 0 and num_q > 0:
+                        cagr = (newest / oldest) ** (4 / num_q) - 1
+                        if cagr > config.scoring.share_cagr_min:
+                            is_candidate = True
+
+                neg_fcf = sum(
+                    1 for r in cashflow
+                    if r.get("free_cash_flow") is not None and r["free_cash_flow"] < 0
+                )
+                if neg_fcf >= config.scoring.fcf_negative_quarters:
+                    is_candidate = True
+
+                if is_candidate:
+                    candidates.append(company)
+
+            except Exception as e:
+                logger.warning("Error screening %s: %s", company.ticker, e)
+
+            screened += 1
+
+        logger.info("Screened %d companies, %d candidates identified", screened, len(candidates))
 
     # ------------------------------------------------------------------ #
     # Step 3: Enrich candidates
@@ -290,6 +329,7 @@ def main():
     parser.add_argument("--quick", action="store_true", help="Quick mode: screen first 500 companies only")
     parser.add_argument("--max-companies", type=int, default=3000, help="Max companies to screen")
     parser.add_argument("--resume", action="store_true", help="Skip already-enriched companies")
+    parser.add_argument("--enrich-only", action="store_true", help="Skip screening, just enrich/score existing candidates")
     args = parser.parse_args()
 
     config = get_config()
@@ -314,6 +354,7 @@ def main():
             max_companies=args.max_companies,
             quick_mode=args.quick,
             resume=args.resume,
+            enrich_only=args.enrich_only,
         )
     except KeyboardInterrupt:
         logger.info("Backfill interrupted. Progress has been saved.")

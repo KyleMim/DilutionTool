@@ -106,9 +106,9 @@ def start_frontend():
 
 def main():
     print("")
-    print("  ╔══════════════════════════════════╗")
-    print("  ║       DILUTION MONITOR           ║")
-    print("  ╚══════════════════════════════════╝")
+    print("  +==================================+")
+    print("  |       DILUTION MONITOR           |")
+    print("  +==================================+")
     print("")
 
     check_env()

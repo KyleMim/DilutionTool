@@ -1,3 +1,8 @@
+databases:
+  - name: dilution-monitor-db
+    plan: free
+    region: oregon
+
 services:
   - type: web
     name: dilution-monitor
@@ -10,13 +15,15 @@ services:
       cd frontend && npm install && npm run build && cd ..
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dilution-monitor-db
+          property: connectionString
       - key: FMP_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: EDGAR_USER_AGENT
         value: "DilutionMonitor contact@example.com"
-      - key: DB_PATH
-        value: "/opt/render/project/data/dilution_monitor.db"
       - key: PYTHON_VERSION
         value: "3.12.0"
