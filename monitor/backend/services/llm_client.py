@@ -6,11 +6,12 @@ from typing import Generator
 from datetime import datetime, timedelta
 
 import anthropic
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from backend.models import Company, DilutionScore, FundamentalsQuarterly, SecFiling, Note
 from backend.services.fmp_client import FMPClient
+from backend.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,12 @@ You have access to tools to look up additional data:
 - Use `save_note` to save a new note or memo with your analysis
 - Use `update_note` to revise or overwrite an existing note
 - Use `web_search` to search the internet for recent news, competitor info, management details, analyst opinions, or any other public information
+- Use `screen_companies` to find other tracked companies matching criteria (sector, score range, tier)
+- Use `compare_companies` to compare this company side-by-side with others on all dilution metrics
+- Use `lookup_sec_filings` to get SEC filing history for any tracked company
+- Use `get_portfolio_stats` to get overall portfolio statistics
+- Use `lookup_score_history` to see how a company's scores have changed over time
+- Use `explain_scoring` to explain how dilution scores are calculated
 
 When the user asks you to write a memo or save findings, use the save_note tool directly.
 You can incorporate content from existing notes by reading them with get_note_detail first.
@@ -75,6 +82,12 @@ You have access to tools to look up data about any company:
 - Use `save_note` to save a new note or memo with your analysis
 - Use `update_note` to revise or overwrite an existing note
 - Use `web_search` to search the internet for recent news, competitor info, management details, analyst opinions, or any other public information
+- Use `screen_companies` to find tracked companies matching criteria (sector, score range, tier)
+- Use `compare_companies` to compare 2-4 companies side-by-side on all dilution metrics
+- Use `lookup_sec_filings` to get SEC filing history for any tracked company
+- Use `get_portfolio_stats` to get overall portfolio statistics (tier counts, avg score, sector breakdown)
+- Use `lookup_score_history` to see how a company's dilution score has changed over time
+- Use `explain_scoring` to explain the scoring methodology, weights, and thresholds
 
 When the user asks you to write a memo or save findings, use the save_note tool directly.
 You can incorporate content from existing notes by reading them with get_note_detail first.
@@ -265,6 +278,106 @@ TOOLS = [
             "required": ["note_id", "title", "content"]
         }
     },
+    {
+        "name": "screen_companies",
+        "description": "Search our tracked companies by criteria like sector, score range, or tier. Returns a ranked table. Use this to find companies matching specific dilution characteristics.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sector": {
+                    "type": "string",
+                    "description": "Filter by sector (e.g. 'Technology', 'Healthcare')"
+                },
+                "min_score": {
+                    "type": "number",
+                    "description": "Minimum composite dilution score (0-100)"
+                },
+                "max_score": {
+                    "type": "number",
+                    "description": "Maximum composite dilution score (0-100)"
+                },
+                "tier": {
+                    "type": "string",
+                    "enum": ["critical", "watchlist", "monitoring"],
+                    "description": "Filter by tracking tier"
+                },
+                "sort_by": {
+                    "type": "string",
+                    "description": "Column to sort by (default: composite_score). Options: composite_score, share_cagr_score, fcf_burn_score, sbc_revenue_score, offering_freq_score, cash_runway_score",
+                    "default": "composite_score"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results (default 10, max 25)",
+                    "default": 10
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "lookup_sec_filings",
+        "description": "Look up SEC filings for a tracked company, including dilution event classification and offering amounts. Shows filing type, date, whether it was dilutive, dilution type (ATM, registered direct, follow-on, convertible, PIPE), and capital raised.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ticker": {
+                    "type": "string",
+                    "description": "Stock ticker symbol"
+                }
+            },
+            "required": ["ticker"]
+        }
+    },
+    {
+        "name": "get_portfolio_stats",
+        "description": "Get a summary of all tracked companies: tier counts (critical/watchlist/monitoring), average dilution score, and sector breakdown. No parameters needed.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "compare_companies",
+        "description": "Compare 2-4 tracked companies side-by-side on all dilution metrics including composite score, share CAGR, FCF burn, SBC/revenue, offering frequency, cash runway, ATM status, and price change.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tickers": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Array of 2-4 ticker symbols to compare",
+                    "minItems": 2,
+                    "maxItems": 4
+                }
+            },
+            "required": ["tickers"]
+        }
+    },
+    {
+        "name": "lookup_score_history",
+        "description": "Get the historical trajectory of a company's dilution score over time. Shows how composite and sub-scores have changed across scoring runs.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ticker": {
+                    "type": "string",
+                    "description": "Stock ticker symbol"
+                }
+            },
+            "required": ["ticker"]
+        }
+    },
+    {
+        "name": "explain_scoring",
+        "description": "Explain how dilution scores are calculated, including all metric weights, thresholds, and tier assignment rules.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
 ]
 
 
@@ -313,6 +426,26 @@ def execute_tool(tool_name: str, tool_input: dict, db: Session, fmp_api_key: str
                 tool_input["title"],
                 tool_input["content"],
             )
+        elif tool_name == "screen_companies":
+            return _tool_screen_companies(
+                db,
+                sector=tool_input.get("sector"),
+                min_score=tool_input.get("min_score"),
+                max_score=tool_input.get("max_score"),
+                tier=tool_input.get("tier"),
+                sort_by=tool_input.get("sort_by", "composite_score"),
+                limit=tool_input.get("limit", 10),
+            )
+        elif tool_name == "lookup_sec_filings":
+            return _tool_sec_filings(tool_input["ticker"], db)
+        elif tool_name == "get_portfolio_stats":
+            return _tool_portfolio_stats(db)
+        elif tool_name == "compare_companies":
+            return _tool_compare_companies(tool_input["tickers"], db)
+        elif tool_name == "lookup_score_history":
+            return _tool_score_history(tool_input["ticker"], db)
+        elif tool_name == "explain_scoring":
+            return _tool_explain_scoring()
         else:
             return f"Unknown tool: {tool_name}"
     except Exception as e:
@@ -588,6 +721,237 @@ def _tool_update_note(db: Session, note_id: int, title: str, content: str) -> st
     _fts_upsert(db, note)
     db.commit()
     return f"Updated {note.note_type} '{title}' (ID: {note.id})"
+
+
+def _tool_screen_companies(
+    db: Session,
+    sector: str = None,
+    min_score: float = None,
+    max_score: float = None,
+    tier: str = None,
+    sort_by: str = "composite_score",
+    limit: int = 10,
+) -> str:
+    limit = min(limit, 25)
+
+    latest_scores = (
+        db.query(
+            DilutionScore.company_id,
+            func.max(DilutionScore.id).label("max_id")
+        )
+        .group_by(DilutionScore.company_id)
+        .subquery()
+    )
+
+    query = (
+        db.query(Company, DilutionScore)
+        .join(DilutionScore, Company.id == DilutionScore.company_id)
+        .join(latest_scores, DilutionScore.id == latest_scores.c.max_id)
+        .filter(Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]))
+    )
+
+    if sector:
+        if sector.lower() == "other":
+            query = query.filter(Company.sector.is_(None))
+        else:
+            query = query.filter(Company.sector == sector)
+    if tier:
+        query = query.filter(Company.tracking_tier == tier)
+    if min_score is not None:
+        query = query.filter(DilutionScore.composite_score >= min_score)
+    if max_score is not None:
+        query = query.filter(DilutionScore.composite_score <= max_score)
+
+    sort_col = getattr(DilutionScore, sort_by, DilutionScore.composite_score)
+    query = query.order_by(desc(sort_col))
+
+    results = query.limit(limit).all()
+
+    if not results:
+        return "No companies found matching those criteria."
+
+    result = f"## Screener Results ({len(results)} companies)\n\n"
+    result += "| Ticker | Name | Sector | Score | Tier |\n"
+    result += "|--------|------|--------|-------|------|\n"
+    for company, score in results:
+        result += (
+            f"| {company.ticker} | {company.name} "
+            f"| {company.sector or 'Other'} "
+            f"| {score.composite_score:.1f} "
+            f"| {company.tracking_tier} |\n"
+        )
+    return result
+
+
+def _tool_sec_filings(ticker: str, db: Session) -> str:
+    company = db.query(Company).filter_by(ticker=ticker.upper()).first()
+    if not company:
+        return f"{ticker} is not tracked in our database."
+
+    filings = (
+        db.query(SecFiling)
+        .filter_by(company_id=company.id)
+        .order_by(desc(SecFiling.filed_date))
+        .limit(20)
+        .all()
+    )
+
+    if not filings:
+        return f"No SEC filings found for {ticker.upper()}."
+
+    result = f"## {ticker.upper()} SEC Filings ({len(filings)} most recent)\n\n"
+    result += "| Date | Type | Dilutive | Dilution Type | Amount |\n"
+    result += "|------|------|----------|---------------|--------|\n"
+    for f in filings:
+        result += (
+            f"| {f.filed_date} | {f.filing_type} "
+            f"| {'Yes' if f.is_dilution_event else 'No'} "
+            f"| {f.dilution_type or '--'} "
+            f"| {_fmt_num(f.offering_amount_dollars)} |\n"
+        )
+    return result
+
+
+def _tool_portfolio_stats(db: Session) -> str:
+    critical = db.query(Company).filter_by(tracking_tier="critical").count()
+    watchlist = db.query(Company).filter_by(tracking_tier="watchlist").count()
+    monitoring = db.query(Company).filter_by(tracking_tier="monitoring").count()
+    total = critical + watchlist + monitoring
+
+    score_subq = (
+        db.query(
+            DilutionScore.company_id,
+            func.max(DilutionScore.id).label("max_id")
+        )
+        .group_by(DilutionScore.company_id)
+        .subquery()
+    )
+    avg_score = (
+        db.query(func.avg(DilutionScore.composite_score))
+        .join(score_subq, DilutionScore.id == score_subq.c.max_id)
+        .scalar()
+    )
+
+    sectors = (
+        db.query(Company.sector, func.count(Company.id))
+        .filter(Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]))
+        .group_by(Company.sector)
+        .all()
+    )
+
+    result = "## Portfolio Summary\n\n"
+    result += f"- **Total Tracked**: {total}\n"
+    result += f"- **Critical**: {critical}\n"
+    result += f"- **Watchlist**: {watchlist}\n"
+    result += f"- **Monitoring**: {monitoring}\n"
+    if avg_score:
+        result += f"- **Avg Composite Score**: {avg_score:.1f}\n\n"
+    else:
+        result += "- **Avg Composite Score**: N/A\n\n"
+    result += "### Sector Breakdown\n\n"
+    result += "| Sector | Count |\n"
+    result += "|--------|-------|\n"
+    for sector, count in sorted(sectors, key=lambda x: x[1], reverse=True):
+        result += f"| {sector or 'Other'} | {count} |\n"
+    return result
+
+
+def _tool_compare_companies(tickers: list, db: Session) -> str:
+    if len(tickers) < 2 or len(tickers) > 4:
+        return "Please provide between 2 and 4 tickers to compare."
+
+    data = []
+    for t in tickers:
+        company = db.query(Company).filter_by(ticker=t.upper()).first()
+        if not company:
+            return f"{t.upper()} is not tracked in our database."
+        score = (
+            db.query(DilutionScore)
+            .filter_by(company_id=company.id)
+            .order_by(desc(DilutionScore.id))
+            .first()
+        )
+        if not score:
+            return f"No dilution score found for {t.upper()}."
+        data.append((company, score))
+
+    tickers_upper = [d[0].ticker for d in data]
+    header = "| Metric | " + " | ".join(tickers_upper) + " |\n"
+    sep = "|--------" + "|-------" * len(data) + "|\n"
+
+    rows = [
+        ("Sector", [d[0].sector or "Other" for d in data]),
+        ("Market Cap", [_fmt_num(d[0].market_cap) for d in data]),
+        ("Composite Score", [f"{d[1].composite_score:.1f}" for d in data]),
+        ("Tier", [d[0].tracking_tier for d in data]),
+        ("Share CAGR 3Y", [_fmt_pct(d[1].share_cagr_3y) for d in data]),
+        ("FCF Burn Rate", [_fmt_pct(d[1].fcf_burn_rate) for d in data]),
+        ("SBC/Revenue", [_fmt_pct(d[1].sbc_revenue_pct) for d in data]),
+        ("Offerings (3Y)", [str(d[1].offering_count_3y or 0) for d in data]),
+        ("Cash Runway (mo)", [_safe_months(d[1].cash_runway_months) for d in data]),
+        ("ATM Active", [str(d[1].atm_program_active) for d in data]),
+        ("12M Price Change", [_fmt_pct(d[1].price_change_12m) for d in data]),
+    ]
+
+    result = f"## Comparison: {' vs '.join(tickers_upper)}\n\n"
+    result += header + sep
+    for label, values in rows:
+        result += f"| {label} | " + " | ".join(values) + " |\n"
+    return result
+
+
+def _tool_score_history(ticker: str, db: Session) -> str:
+    company = db.query(Company).filter_by(ticker=ticker.upper()).first()
+    if not company:
+        return f"{ticker} is not tracked in our database."
+
+    scores = (
+        db.query(DilutionScore)
+        .filter_by(company_id=company.id)
+        .order_by(DilutionScore.score_date.asc())
+        .all()
+    )
+
+    if not scores:
+        return f"No score history found for {ticker.upper()}."
+
+    result = f"## {ticker.upper()} Score History ({len(scores)} data points)\n\n"
+    result += "| Date | Composite | Share CAGR | FCF Burn | SBC/Rev | Offering | Runway | ATM |\n"
+    result += "|------|-----------|------------|----------|---------|----------|--------|-----|\n"
+    for s in scores:
+        result += (
+            f"| {s.score_date} "
+            f"| {s.composite_score:.1f} "
+            f"| {_safe_score(s.share_cagr_score)} "
+            f"| {_safe_score(s.fcf_burn_score)} "
+            f"| {_safe_score(s.sbc_revenue_score)} "
+            f"| {_safe_score(s.offering_freq_score)} "
+            f"| {_safe_score(s.cash_runway_score)} "
+            f"| {_safe_score(s.atm_active_score)} |\n"
+        )
+    return result
+
+
+def _tool_explain_scoring() -> str:
+    cfg = get_config()
+    s = cfg.scoring
+
+    result = "## Dilution Scoring Methodology\n\n"
+    result += "Each company receives a **composite dilution score (0-100)** where higher = more dilutive.\n"
+    result += "The composite is a weighted sum of 6 sub-scores:\n\n"
+    result += "| Metric | Weight | Description | Ceiling/Threshold |\n"
+    result += "|--------|--------|-------------|-------------------|\n"
+    result += f"| Share CAGR (3Y) | {s.weight_share_cagr:.0%} | Annualized share count growth | {s.share_cagr_ceiling:.0%} CAGR = max score |\n"
+    result += f"| FCF Burn Rate | {s.weight_fcf_burn:.0%} | Free cash flow burn as % of cash | {s.fcf_burn_ceiling:.0%} burn = max score |\n"
+    result += f"| SBC/Revenue | {s.weight_sbc_revenue:.0%} | Stock-based comp as % of revenue | {s.sbc_revenue_ceiling:.0%} ratio = max score |\n"
+    result += f"| Offering Frequency | {s.weight_offering_freq:.0%} | Dilutive SEC filings in 3 years | {s.offering_freq_ceiling} offerings = max score |\n"
+    result += f"| Cash Runway | {s.weight_cash_runway:.0%} | Months of cash at current burn | <{s.cash_runway_max_months} months starts scoring |\n"
+    result += f"| ATM Program Active | {s.weight_atm_active:.0%} | Whether an at-the-market program is active | Binary: active = full score |\n"
+    result += f"\n### Tier Assignment\n\n"
+    result += f"- **Critical**: Top {100 - s.critical_percentile:.0f}% of scores (>= {s.critical_percentile:.0f}th percentile)\n"
+    result += f"- **Watchlist**: {s.watchlist_percentile:.0f}th - {s.critical_percentile:.0f}th percentile\n"
+    result += f"- **Monitoring**: Below {s.watchlist_percentile:.0f}th percentile\n"
+    return result
 
 
 def _fts_upsert(db: Session, note: Note):

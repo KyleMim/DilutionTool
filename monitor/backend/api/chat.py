@@ -315,5 +315,11 @@ def _tool_friendly_name(tool_name: str, tool_input: dict) -> str:
         "web_search": f"Searching the web{' for ' + query if query else ''}...",
         "save_note": f"Saving {tool_input.get('note_type', 'note')}...",
         "update_note": f"Updating note #{tool_input.get('note_id', '')}...",
+        "screen_companies": f"Screening companies{' in ' + tool_input.get('sector', '') if tool_input.get('sector') else ''}{' (' + tool_input.get('tier', '') + ' tier)' if tool_input.get('tier') else ''}...",
+        "lookup_sec_filings": f"Looking up {ticker} SEC filings...",
+        "get_portfolio_stats": "Calculating portfolio statistics...",
+        "compare_companies": f"Comparing {', '.join(tool_input.get('tickers', []))}...",
+        "lookup_score_history": f"Getting {ticker} score history...",
+        "explain_scoring": "Explaining scoring methodology...",
     }
     return descriptions.get(tool_name, f"Using {tool_name}...")
