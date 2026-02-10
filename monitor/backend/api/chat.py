@@ -295,5 +295,7 @@ def _tool_friendly_name(tool_name: str, tool_input: dict) -> str:
         "search_notes": f"Searching notes{' for ' + query if query else ''}{' (' + ticker + ')' if ticker else ''}...",
         "get_note_detail": f"Reading note #{note_id}...",
         "web_search": f"Searching the web{' for ' + query if query else ''}...",
+        "save_note": f"Saving {tool_input.get('note_type', 'note')}...",
+        "update_note": f"Updating note #{tool_input.get('note_id', '')}...",
     }
     return descriptions.get(tool_name, f"Using {tool_name}...")

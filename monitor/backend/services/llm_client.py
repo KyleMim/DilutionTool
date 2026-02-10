@@ -49,7 +49,12 @@ You have access to tools to look up additional data:
 - Use `lookup_stock_price` to get historical daily prices
 - Use `search_notes` to find previous research notes and memos (returns previews)
 - Use `get_note_detail` to read the full content of a specific note by ID
+- Use `save_note` to save a new note or memo with your analysis
+- Use `update_note` to revise or overwrite an existing note
 - Use `web_search` to search the internet for recent news, competitor info, management details, analyst opinions, or any other public information
+
+When the user asks you to write a memo or save findings, use the save_note tool directly.
+You can incorporate content from existing notes by reading them with get_note_detail first.
 
 Provide insightful analysis. Be specific, reference the actual data points. Use markdown
 formatting for clarity. When discussing dilution risk, explain the implications for shareholders.
@@ -67,8 +72,12 @@ You have access to tools to look up data about any company:
 - Use `lookup_dilution_score` to get our internal dilution score for tracked companies
 - Use `search_notes` to find previous research notes and memos (returns previews)
 - Use `get_note_detail` to read the full content of a specific note by ID
+- Use `save_note` to save a new note or memo with your analysis
+- Use `update_note` to revise or overwrite an existing note
 - Use `web_search` to search the internet for recent news, competitor info, management details, analyst opinions, or any other public information
 
+When the user asks you to write a memo or save findings, use the save_note tool directly.
+You can incorporate content from existing notes by reading them with get_note_detail first.
 When a user asks about a specific company, use the tools to look up data before answering.
 Respond in clear, concise markdown."""
 
@@ -207,6 +216,55 @@ TOOLS = [
             "required": ["note_id"]
         }
     },
+    {
+        "name": "save_note",
+        "description": "Save a new note or memo. Use this when the user asks you to write up findings, create a memo, save research, or document analysis. You write the full content in markdown.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Title for the note or memo"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Full content in markdown format"
+                },
+                "note_type": {
+                    "type": "string",
+                    "enum": ["note", "memo"],
+                    "description": "Type of note: 'note' for general notes, 'memo' for structured investment memos"
+                },
+                "ticker": {
+                    "type": "string",
+                    "description": "Company ticker to associate with this note (optional)"
+                }
+            },
+            "required": ["title", "content", "note_type"]
+        }
+    },
+    {
+        "name": "update_note",
+        "description": "Update/overwrite an existing note or memo. Use this when the user asks you to edit, revise, or update a specific note. Use get_note_detail first to read the current content.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "note_id": {
+                    "type": "integer",
+                    "description": "The ID of the note to update"
+                },
+                "title": {
+                    "type": "string",
+                    "description": "New title for the note"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "New full content in markdown format (replaces existing content entirely)"
+                }
+            },
+            "required": ["note_id", "title", "content"]
+        }
+    },
 ]
 
 
@@ -240,6 +298,21 @@ def execute_tool(tool_name: str, tool_input: dict, db: Session, fmp_api_key: str
             )
         elif tool_name == "get_note_detail":
             return _tool_get_note_detail(db, tool_input["note_id"])
+        elif tool_name == "save_note":
+            return _tool_save_note(
+                db,
+                tool_input["title"],
+                tool_input["content"],
+                tool_input["note_type"],
+                tool_input.get("ticker"),
+            )
+        elif tool_name == "update_note":
+            return _tool_update_note(
+                db,
+                tool_input["note_id"],
+                tool_input["title"],
+                tool_input["content"],
+            )
         else:
             return f"Unknown tool: {tool_name}"
     except Exception as e:
@@ -486,6 +559,57 @@ def _tool_get_note_detail(db: Session, note_id: int) -> str:
     result += f"- **Updated**: {note.updated_at}\n\n"
     result += note.content
     return result
+
+
+def _tool_save_note(db: Session, title: str, content: str, note_type: str, ticker: str = None) -> str:
+    note = Note(
+        title=title,
+        content=content,
+        note_type=note_type,
+        ticker=ticker.upper() if ticker else None,
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    _fts_upsert(db, note)
+    db.commit()
+    return f"Saved {note_type} '{title}' (ID: {note.id})"
+
+
+def _tool_update_note(db: Session, note_id: int, title: str, content: str) -> str:
+    note = db.query(Note).get(note_id)
+    if not note:
+        return f"Note {note_id} not found."
+    note.title = title
+    note.content = content
+    note.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(note)
+    _fts_upsert(db, note)
+    db.commit()
+    return f"Updated {note.note_type} '{title}' (ID: {note.id})"
+
+
+def _fts_upsert(db: Session, note: Note):
+    """Insert or update the FTS index for a note (SQLite only)."""
+    from backend.database import is_sqlite
+    from sqlalchemy import text as sql_text
+    if not is_sqlite():
+        return
+    db.execute(sql_text("DELETE FROM notes_fts WHERE rowid = :id"), {"id": note.id})
+    db.execute(
+        sql_text(
+            "INSERT INTO notes_fts(rowid, title, content, ticker, note_type) "
+            "VALUES (:id, :title, :content, :ticker, :note_type)"
+        ),
+        {
+            "id": note.id,
+            "title": note.title,
+            "content": note.content,
+            "ticker": note.ticker or "",
+            "note_type": note.note_type,
+        },
+    )
 
 
 # ── Helper formatters ────────────────────────────────────────────────
