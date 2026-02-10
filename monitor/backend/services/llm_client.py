@@ -49,6 +49,7 @@ You have access to tools to look up additional data:
 - Use `lookup_stock_price` to get historical daily prices
 - Use `search_notes` to find previous research notes and memos (returns previews)
 - Use `get_note_detail` to read the full content of a specific note by ID
+- Use `web_search` to search the internet for recent news, competitor info, management details, analyst opinions, or any other public information
 
 Provide insightful analysis. Be specific, reference the actual data points. Use markdown
 formatting for clarity. When discussing dilution risk, explain the implications for shareholders.
@@ -66,6 +67,7 @@ You have access to tools to look up data about any company:
 - Use `lookup_dilution_score` to get our internal dilution score for tracked companies
 - Use `search_notes` to find previous research notes and memos (returns previews)
 - Use `get_note_detail` to read the full content of a specific note by ID
+- Use `web_search` to search the internet for recent news, competitor info, management details, analyst opinions, or any other public information
 
 When a user asks about a specific company, use the tools to look up data before answering.
 Respond in clear, concise markdown."""
@@ -621,6 +623,9 @@ class LLMClient:
         current_messages = list(messages)
         max_tool_rounds = 5  # prevent infinite loops
 
+        # Combine custom tools with Anthropic's server-side web search
+        all_tools = TOOLS + [{"type": "web_search_20250305"}]
+
         for _round in range(max_tool_rounds):
             # Call Claude (non-streaming to detect tool use)
             response = self.client.messages.create(
@@ -628,15 +633,27 @@ class LLMClient:
                 max_tokens=4096,
                 system=system_prompt,
                 messages=current_messages,
-                tools=TOOLS,
+                tools=all_tools,
             )
 
-            # Check if response has tool use
+            # Separate block types:
+            # - tool_use: custom tools we execute ourselves
+            # - server_tool_use: server-side tools (web_search) already executed
+            # - text: final text response
             tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
+            server_tool_blocks = [b for b in response.content if b.type == "server_tool_use"]
             text_blocks = [b for b in response.content if b.type == "text"]
 
+            # Notify frontend about any web searches that happened
+            for stb in server_tool_blocks:
+                yield {
+                    "type": "tool_use",
+                    "tool": "web_search",
+                    "input": getattr(stb, "input", {}),
+                }
+
             if not tool_use_blocks:
-                # No tool calls — this is the final response, stream it
+                # No custom tool calls — this is the final response, stream it
                 final_text = "".join(b.text for b in text_blocks)
                 # Yield in chunks to simulate streaming
                 chunk_size = 20
@@ -645,14 +662,14 @@ class LLMClient:
                 yield {"type": "done", "content": final_text}
                 return
 
-            # Has tool calls — execute them
-            # First, add Claude's response to messages
+            # Has custom tool calls — execute them
+            # Add Claude's full response to messages (includes server tool blocks)
             current_messages.append({
                 "role": "assistant",
                 "content": [b.model_dump() for b in response.content],
             })
 
-            # Execute each tool and add results
+            # Execute each custom tool and add results
             tool_results = []
             for tool_block in tool_use_blocks:
                 # Notify frontend about tool usage

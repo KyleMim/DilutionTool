@@ -294,5 +294,6 @@ def _tool_friendly_name(tool_name: str, tool_input: dict) -> str:
         "lookup_dilution_score": f"Checking {ticker} dilution score...",
         "search_notes": f"Searching notes{' for ' + query if query else ''}{' (' + ticker + ')' if ticker else ''}...",
         "get_note_detail": f"Reading note #{note_id}...",
+        "web_search": f"Searching the web{' for ' + query if query else ''}...",
     }
     return descriptions.get(tool_name, f"Using {tool_name}...")
