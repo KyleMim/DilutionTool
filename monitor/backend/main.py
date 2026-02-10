@@ -194,6 +194,9 @@ def list_companies(
         .join(latest_scores, DilutionScore.id == latest_scores.c.max_id)
     )
 
+    # Always exclude inactive companies
+    query = query.filter(Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]))
+
     # Filters
     if sector:
         if sector.lower() == "other":
