@@ -30,6 +30,8 @@ export default function ChatPanel({
     streamingContent,
     toolActivity,
     sendMessage,
+    stopGeneration,
+    editAndResend,
     conversations,
     selectConversation,
     newConversation,
@@ -170,6 +172,7 @@ export default function ChatPanel({
             isStreaming={isStreaming}
             streamingContent={streamingContent}
             toolActivity={toolActivity}
+            onEditMessage={editAndResend}
           />
         </>
       )}
@@ -177,6 +180,7 @@ export default function ChatPanel({
       {!showHistory && (
         <ChatInput
           onSend={sendMessage}
+          onStop={stopGeneration}
           isStreaming={isStreaming}
           placeholder={ticker ? `Ask about ${ticker}...` : "Ask anything..."}
         />

@@ -10,9 +10,10 @@ interface Props {
   isStreaming: boolean;
   streamingContent: string;
   toolActivity?: ToolActivity | null;
+  onEditMessage?: (messageId: number, newContent: string) => void;
 }
 
-export default function MessageList({ messages, isStreaming, streamingContent, toolActivity }: Props) {
+export default function MessageList({ messages, isStreaming, streamingContent, toolActivity, onEditMessage }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,7 +38,12 @@ export default function MessageList({ messages, isStreaming, streamingContent, t
   return (
     <div className="flex-1 overflow-y-auto p-4">
       {messages.map((msg) => (
-        <MessageBubble key={msg.id} message={msg} />
+        <MessageBubble
+          key={msg.id}
+          message={msg}
+          onEdit={onEditMessage}
+          isStreaming={isStreaming}
+        />
       ))}
       {isStreaming && streamingContent && (
         <div className="flex justify-start mb-3">

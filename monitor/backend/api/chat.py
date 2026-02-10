@@ -174,6 +174,24 @@ def rename_conversation(
     )
 
 
+@router.delete("/conversations/{conversation_id}/messages/{message_id}/truncate", status_code=204)
+def truncate_from_message(
+    conversation_id: int,
+    message_id: int,
+    db: Session = Depends(get_db),
+):
+    """Delete a message and all subsequent messages (for edit-and-resend flow)."""
+    msg = db.query(Message).filter_by(id=message_id, conversation_id=conversation_id).first()
+    if not msg:
+        raise HTTPException(404, "Message not found")
+    # Delete this message and everything after it
+    db.query(Message).filter(
+        Message.conversation_id == conversation_id,
+        Message.id >= message_id,
+    ).delete()
+    db.commit()
+
+
 @router.post("/conversations/{conversation_id}/messages")
 def send_message(
     conversation_id: int,

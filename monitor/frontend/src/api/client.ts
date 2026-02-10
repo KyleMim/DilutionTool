@@ -210,6 +210,13 @@ export function sendMessageUrl(conversationId: number): string {
   return `${BASE_URL}/api/chat/conversations/${conversationId}/messages`;
 }
 
+export function truncateFromMessage(conversationId: number, messageId: number) {
+  return fetchJson<void>(
+    `/api/chat/conversations/${conversationId}/messages/${messageId}/truncate`,
+    { method: "DELETE" }
+  );
+}
+
 // ── Notes API calls ─────────────────────────────────────────────────
 
 export function createNote(data: {

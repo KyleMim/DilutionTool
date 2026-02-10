@@ -5,6 +5,7 @@ import {
   fetchConversation,
   sendMessageUrl,
   deleteConversation,
+  truncateFromMessage,
   type ConversationResponse,
   type MessageResponse,
 } from "../api/client";
@@ -21,6 +22,8 @@ interface UseChatReturn {
   streamingContent: string;
   toolActivity: ToolActivity | null;
   sendMessage: (content: string) => void;
+  stopGeneration: () => void;
+  editAndResend: (messageId: number, newContent: string) => void;
   conversations: ConversationResponse[];
   selectConversation: (id: number) => Promise<void>;
   newConversation: () => void;
@@ -190,6 +193,31 @@ export function useChat(ticker?: string): UseChatReturn {
     [conversation, ticker, isStreaming, loadConversations]
   );
 
+  const stopGeneration = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
+  const editAndResend = useCallback(
+    async (messageId: number, newContent: string) => {
+      if (isStreaming || !conversation?.id) return;
+      try {
+        // Truncate conversation from this message onward (deletes it + all after)
+        await truncateFromMessage(conversation.id, messageId);
+        // Update local state: remove the edited message and everything after it
+        setMessages((prev) => {
+          const idx = prev.findIndex((m) => m.id === messageId);
+          if (idx === -1) return prev;
+          return prev.slice(0, idx);
+        });
+        // Send the edited content as a fresh message (creates user msg + streams AI response)
+        sendMessage(newContent);
+      } catch {
+        setError("Failed to edit message");
+      }
+    },
+    [conversation, isStreaming, sendMessage]
+  );
+
   return {
     conversation,
     messages,
@@ -197,6 +225,8 @@ export function useChat(ticker?: string): UseChatReturn {
     streamingContent,
     toolActivity,
     sendMessage,
+    stopGeneration,
+    editAndResend,
     conversations,
     selectConversation,
     newConversation,
