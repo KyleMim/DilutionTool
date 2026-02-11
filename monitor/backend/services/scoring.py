@@ -1,4 +1,5 @@
 import logging
+import statistics
 from datetime import date, timedelta
 
 from sqlalchemy import desc
@@ -178,15 +179,47 @@ def _calc_share_cagr(fundamentals: list[FundamentalsQuarterly]) -> float | None:
     return max(cagr, 0)  # Only care about growth (dilution)
 
 
+def _remove_outliers(values: list[float], label: str = "") -> list[float]:
+    """Remove absurd outliers using IQR method (3x fence).
+
+    Only activates with 4+ data points.  Returns the filtered list.
+    """
+    if len(values) < 4:
+        return values
+
+    sorted_vals = sorted(values)
+    n = len(sorted_vals)
+    q1 = sorted_vals[n // 4]
+    q3 = sorted_vals[(3 * n) // 4]
+    iqr = q3 - q1
+
+    # Use absolute values for the fence when all values share the same sign,
+    # so that a 1000x magnitude spike is always caught.
+    lower = q1 - 3 * iqr
+    upper = q3 + 3 * iqr
+
+    filtered = [v for v in values if lower <= v <= upper]
+    removed = len(values) - len(filtered)
+    if removed:
+        excluded = [v for v in values if v < lower or v > upper]
+        logger.warning(
+            "Outlier filter (%s): removed %d value(s) %s  (fence [%.2g, %.2g])",
+            label, removed, excluded, lower, upper,
+        )
+    return filtered if filtered else values  # never return empty
+
+
 def _calc_fcf_burn_rate(fundamentals: list[FundamentalsQuarterly], market_cap: float | None) -> float | None:
-    """Average negative quarterly FCF / market_cap, annualized."""
+    """Trailing 4Q average negative FCF / market_cap, annualized."""
     if not market_cap or market_cap <= 0:
         return None
 
-    negative_fcf = [f.free_cash_flow for f in fundamentals if f.free_cash_flow is not None and f.free_cash_flow < 0]
+    recent = fundamentals[-4:] if len(fundamentals) >= 4 else fundamentals
+    negative_fcf = [f.free_cash_flow for f in recent if f.free_cash_flow is not None and f.free_cash_flow < 0]
     if not negative_fcf:
         return None
 
+    negative_fcf = _remove_outliers(negative_fcf, "fcf_burn")
     avg_quarterly_burn = sum(negative_fcf) / len(negative_fcf)
     annualized_burn = avg_quarterly_burn * 4
     return annualized_burn / market_cap  # Will be negative
@@ -220,7 +253,7 @@ def _has_sbc_no_revenue(fundamentals: list[FundamentalsQuarterly]) -> bool:
 
 
 def _calc_cash_runway_months(fundamentals: list[FundamentalsQuarterly]) -> float | None:
-    """Latest cash / abs(avg quarterly FCF burn), in months."""
+    """Latest cash / abs(trailing 4Q avg FCF burn), in months."""
     if not fundamentals:
         return None
 
@@ -233,10 +266,12 @@ def _calc_cash_runway_months(fundamentals: list[FundamentalsQuarterly]) -> float
     if latest_cash is None:
         return None
 
-    negative_fcf = [f.free_cash_flow for f in fundamentals if f.free_cash_flow is not None and f.free_cash_flow < 0]
+    recent = fundamentals[-4:] if len(fundamentals) >= 4 else fundamentals
+    negative_fcf = [f.free_cash_flow for f in recent if f.free_cash_flow is not None and f.free_cash_flow < 0]
     if not negative_fcf:
         return None  # Not burning cash
 
+    negative_fcf = _remove_outliers(negative_fcf, "cash_runway")
     avg_quarterly_burn = abs(sum(negative_fcf) / len(negative_fcf))
     if avg_quarterly_burn == 0:
         return None

@@ -28,8 +28,68 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=3000, quick_mode=False, resume=False, enrich_only=False):
+def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=3000, quick_mode=False, resume=False, enrich_only=False, score_only=False):
     """Main backfill pipeline."""
+
+    if score_only:
+        # ------------------------------------------------------------------ #
+        # Score-only mode: skip Steps 1-3, just rescore + retier
+        # ------------------------------------------------------------------ #
+        logger.info("Score-only mode: rescoring all tracked companies with existing data...")
+        scores = score_all(db_session, config.scoring)
+
+        # Fetch trailing 12-month price changes
+        logger.info("Fetching trailing 12-month price changes...")
+        price_updated = 0
+        for score in scores:
+            company = db_session.get(Company, score.company_id)
+            try:
+                pct = fmp_client.get_price_change_12m(company.ticker)
+                if pct is not None:
+                    score.price_change_12m = round(pct, 4)
+                    price_updated += 1
+            except Exception as e:
+                logger.warning("Price fetch failed for %s: %s", company.ticker, e)
+        db_session.commit()
+        logger.info("Updated 12-month price change for %d companies", price_updated)
+
+        # Re-assign tiers by percentile rank
+        sorted_scores = sorted(scores, key=lambda s: s.composite_score)
+        n = len(sorted_scores)
+        critical_idx = int(n * config.scoring.critical_percentile / 100)
+        watchlist_idx = int(n * config.scoring.watchlist_percentile / 100)
+
+        critical_count = watchlist_count = monitoring_count = 0
+        for i, score in enumerate(sorted_scores):
+            company = db_session.get(Company, score.company_id)
+            if i >= critical_idx:
+                company.tracking_tier = "critical"
+                critical_count += 1
+            elif i >= watchlist_idx:
+                company.tracking_tier = "watchlist"
+                watchlist_count += 1
+            else:
+                company.tracking_tier = "monitoring"
+                monitoring_count += 1
+        db_session.commit()
+
+        logger.info("Critical: %d, Watchlist: %d, Monitoring: %d", critical_count, watchlist_count, monitoring_count)
+
+        # Print top 10
+        top_scores = sorted(scores, key=lambda s: s.composite_score, reverse=True)[:10]
+        if top_scores:
+            print("\n" + "=" * 70)
+            print(f"{'Rank':<6}{'Ticker':<10}{'Score':<10}{'Share CAGR':<12}{'FCF Burn':<10}{'Offerings':<10}")
+            print("-" * 70)
+            for rank, score in enumerate(top_scores, 1):
+                company = db_session.get(Company, score.company_id)
+                cagr = f"{score.share_cagr_3y:.0%}" if score.share_cagr_3y is not None else "N/A"
+                burn = f"{score.fcf_burn_rate:.0%}" if score.fcf_burn_rate is not None else "N/A"
+                offerings = score.offering_count_3y if score.offering_count_3y is not None else 0
+                print(f"{rank:<6}{company.ticker:<10}{score.composite_score:<10.1f}{cagr:<12}{burn:<10}{offerings:<10}")
+            print("=" * 70 + "\n")
+
+        return scores
 
     if enrich_only:
         # ------------------------------------------------------------------ #
@@ -345,6 +405,7 @@ def main():
     parser.add_argument("--max-companies", type=int, default=3000, help="Max companies to screen")
     parser.add_argument("--resume", action="store_true", help="Skip already-enriched companies")
     parser.add_argument("--enrich-only", action="store_true", help="Skip screening, just enrich/score existing candidates")
+    parser.add_argument("--score-only", action="store_true", help="Skip all data fetching, just rescore + retier using existing DB data")
     args = parser.parse_args()
 
     config = get_config()
@@ -370,6 +431,7 @@ def main():
             quick_mode=args.quick,
             resume=args.resume,
             enrich_only=args.enrich_only,
+            score_only=args.score_only,
         )
     except KeyboardInterrupt:
         logger.info("Backfill interrupted. Progress has been saved.")
