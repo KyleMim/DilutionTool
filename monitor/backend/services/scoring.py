@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.config import ScoringConfig
 from backend.models import Company, FundamentalsQuarterly, SecFiling, DilutionScore
-from backend.services.filters import is_spac_name
+from backend.services.filters import is_spac_name, is_non_equity
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ def score_company(db_session: Session, company_id: int, config: ScoringConfig) -
 
 
 def score_all(db_session: Session, config: ScoringConfig) -> list[DilutionScore]:
-    """Score every watchlist company, skipping SPACs."""
+    """Score every watchlist company, skipping SPACs and non-equity securities."""
     companies = (
         db_session.query(Company)
         .filter(Company.tracking_tier.in_(["critical", "watchlist", "monitoring"]))
@@ -134,8 +134,8 @@ def score_all(db_session: Session, config: ScoringConfig) -> list[DilutionScore]
     )
     results = []
     for company in companies:
-        if is_spac_name(company.name):
-            logger.info("Skipping SPAC: %s (%s)", company.ticker, company.name)
+        if is_spac_name(company.name) or is_non_equity(company.ticker, company.name):
+            logger.info("Skipping non-equity/SPAC: %s (%s)", company.ticker, company.name)
             company.tracking_tier = "inactive"
             db_session.commit()
             continue

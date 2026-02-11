@@ -18,7 +18,7 @@ from backend.models import Company, FundamentalsQuarterly, SecFiling
 from backend.services.fmp_client import FMPClient, _date_to_fiscal_period
 from backend.services.edgar_client import EdgarClient
 from backend.services.scoring import score_company, score_all
-from backend.services.filters import is_spac_name
+from backend.services.filters import is_spac_name, is_non_equity
 from backend.pipelines.validate import validate_incoming_record
 
 logging.basicConfig(
@@ -217,8 +217,8 @@ def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=300
             if i % 50 == 0:
                 logger.info("Screening progress: %d/%d (candidates so far: %d)", i, len(to_screen), len(candidates))
 
-            # Skip SPACs
-            if is_spac_name(company.name):
+            # Skip SPACs and non-equity securities
+            if is_spac_name(company.name) or is_non_equity(company.ticker, company.name):
                 company.is_spac = True
                 continue
 
