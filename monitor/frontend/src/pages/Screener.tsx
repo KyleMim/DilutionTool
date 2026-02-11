@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import {
   fetchCompanies,
   fetchStats,
-  fetchSectors,
   type CompanyListItem,
 } from "../api/client";
 import ScoreBadge from "../components/ScoreBadge";
@@ -136,14 +135,9 @@ export default function Screener() {
   const showMonitoring = localStorage.getItem("showMonitoring") === "true";
 
   const statsQ = useQuery({ queryKey: ["stats"], queryFn: fetchStats });
-  const sectorsQ = useQuery({ queryKey: ["sectors"], queryFn: fetchSectors });
   const companiesQ = useQuery({
-    queryKey: ["companies", sector],
-    queryFn: () =>
-      fetchCompanies({
-        limit: 10000,
-        ...(sector ? { sector } : {}),
-      }),
+    queryKey: ["companies"],
+    queryFn: () => fetchCompanies({ limit: 10000 }),
   });
 
   const parsed = useMemo(() => parseSearchQuery(search), [search]);
@@ -157,6 +151,11 @@ export default function Screener() {
       filtered = filtered.filter((c) => c.tracking_tier === tier);
     } else if (!showMonitoring) {
       filtered = filtered.filter((c) => c.tracking_tier !== "monitoring");
+    }
+
+    // Filter by sector
+    if (sector) {
+      filtered = filtered.filter((c) => (c.sector || "Other") === sector);
     }
 
     // Text search (ticker or company name)
@@ -183,7 +182,7 @@ export default function Screener() {
       if (typeof av === "string") return av.localeCompare(bv as string) * (sortDir === "desc" ? -1 : 1);
       return ((av as number) - (bv as number)) * (sortDir === "desc" ? -1 : 1);
     });
-  }, [companiesQ.data, sortKey, sortDir, tier, showMonitoring, parsed]);
+  }, [companiesQ.data, sortKey, sortDir, tier, sector, showMonitoring, parsed]);
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
   const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -199,7 +198,23 @@ export default function Screener() {
   }
 
   const stats = statsQ.data;
-  const sectors = sectorsQ.data;
+
+  // Compute sector counts client-side from visible companies (respects monitoring toggle)
+  const sectorCounts = useMemo(() => {
+    if (!companiesQ.data) return [];
+    let visible = companiesQ.data;
+    if (!showMonitoring) {
+      visible = visible.filter((c) => c.tracking_tier !== "monitoring");
+    }
+    const counts: Record<string, number> = {};
+    for (const c of visible) {
+      const s = c.sector || "Other";
+      counts[s] = (counts[s] || 0) + 1;
+    }
+    return Object.entries(counts)
+      .map(([sector, count]) => ({ sector, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [companiesQ.data, showMonitoring]);
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
@@ -266,7 +281,7 @@ export default function Screener() {
         </select>
 
         {/* Sector filter */}
-        {sectors && sectors.length > 0 && (
+        {sectorCounts.length > 0 && (
           <select
             value={sector ?? ""}
             onChange={(e) => { setSector(e.target.value || null); setPage(0); }}
@@ -274,9 +289,9 @@ export default function Screener() {
             style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center' }}
           >
             <option value="">All Sectors</option>
-            {sectors.map((s) => (
-              <option key={s.sector || "other"} value={s.sector || "other"}>
-                {s.sector || "Other"} ({s.count})
+            {sectorCounts.map((s) => (
+              <option key={s.sector} value={s.sector}>
+                {s.sector} ({s.count})
               </option>
             ))}
           </select>
