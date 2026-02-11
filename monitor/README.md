@@ -16,10 +16,10 @@ Automated surveillance system that identifies public companies engaged in consis
 | Signal | Weight | What It Measures |
 |---|---|---|
 | Share CAGR | 25% | Annualized diluted share count growth over 3 years |
-| FCF Burn | 20% | Annual free cash flow burn relative to market cap |
-| SBC / Revenue | 15% | Stock-based compensation as a percentage of revenue |
+| FCF Burn | 20% | Trailing 4Q avg negative FCF / market cap (annualized, outlier-filtered) |
+| SBC / Revenue | 15% | Stock-based compensation as a percentage of revenue (trailing 4Q) |
 | Offering Frequency | 20% | Count of dilutive SEC filings in the last 3 years |
-| Cash Runway | 10% | Months of cash remaining at current burn rate |
+| Cash Runway | 10% | Months of cash at trailing 4Q burn rate (outlier-filtered) |
 | ATM Active | 10% | Whether the company has an active ATM or shelf registration |
 
 Each sub-score ranges from 0-100. The composite score is a weighted average, with automatic renormalization when data is missing.
@@ -114,9 +114,23 @@ make prod     # Run production server locally (serves built React app from FastA
 The quick start screens 500 companies. To scan the full universe:
 
 ```bash
-python -m backend.pipelines.backfill          # Full run (~10,000 companies)
-python -m backend.pipelines.backfill --resume  # Resume an interrupted run
+python -m backend.pipelines.backfill              # Full run (~10,000 companies)
+python -m backend.pipelines.backfill --resume      # Resume an interrupted run
+python -m backend.pipelines.backfill --score-only  # Rescore using existing DB data (no API calls)
 ```
+
+## Data Validation
+
+Source API data (FMP) occasionally contains erroneous values. The validation tool detects and optionally corrects outliers:
+
+```bash
+python -m backend.pipelines.validate               # Scan & report outliers
+python -m backend.pipelines.validate --ticker NNE   # Check a single company
+python -m backend.pipelines.validate --fix          # Fix via web search (interactive)
+python -m backend.pipelines.validate --fix --yes    # Auto-fix all
+```
+
+See [docs/scoring-data-quality.md](docs/scoring-data-quality.md) for details on the outlier detection methodology.
 
 ## API Documentation
 
@@ -153,7 +167,8 @@ monitor/
 │   │   ├── edgar_client.py       # SEC EDGAR client + filing classifier
 │   │   └── scoring.py            # Composite dilution scoring engine
 │   ├── pipelines/
-│   │   └── backfill.py           # Universe screen + data load + scoring
+│   │   ├── backfill.py           # Universe screen + data load + scoring (--score-only for rescore)
+│   │   └── validate.py           # Outlier detection + web-search correction CLI
 │   └── tests/
 │       ├── test_fmp_client.py    # 15 tests
 │       ├── test_edgar_client.py  # 20 tests

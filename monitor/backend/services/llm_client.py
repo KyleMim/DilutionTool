@@ -1058,15 +1058,18 @@ def _tool_explain_scoring() -> str:
     result += "| Metric | Weight | Description | Ceiling/Threshold |\n"
     result += "|--------|--------|-------------|-------------------|\n"
     result += f"| Share CAGR (3Y) | {s.weight_share_cagr:.0%} | Annualized share count growth | {s.share_cagr_ceiling:.0%} CAGR = max score |\n"
-    result += f"| FCF Burn Rate | {s.weight_fcf_burn:.0%} | Free cash flow burn as % of cash | {s.fcf_burn_ceiling:.0%} burn = max score |\n"
-    result += f"| SBC/Revenue | {s.weight_sbc_revenue:.0%} | Stock-based comp as % of revenue | {s.sbc_revenue_ceiling:.0%} ratio = max score |\n"
+    result += f"| FCF Burn Rate | {s.weight_fcf_burn:.0%} | Trailing 4Q avg negative FCF / market cap (annualized) | {s.fcf_burn_ceiling:.0%} burn = max score |\n"
+    result += f"| SBC/Revenue | {s.weight_sbc_revenue:.0%} | Stock-based comp as % of revenue (trailing 4Q) | {s.sbc_revenue_ceiling:.0%} ratio = max score |\n"
     result += f"| Offering Frequency | {s.weight_offering_freq:.0%} | Dilutive SEC filings in 3 years | {s.offering_freq_ceiling} offerings = max score |\n"
-    result += f"| Cash Runway | {s.weight_cash_runway:.0%} | Months of cash at current burn | <{s.cash_runway_max_months} months starts scoring |\n"
+    result += f"| Cash Runway | {s.weight_cash_runway:.0%} | Cash / trailing 4Q avg burn (months) | <{s.cash_runway_max_months} months starts scoring |\n"
     result += f"| ATM Program Active | {s.weight_atm_active:.0%} | Whether an at-the-market program is active | Binary: active = full score |\n"
     result += f"\n### Tier Assignment\n\n"
     result += f"- **Critical**: Top {100 - s.critical_percentile:.0f}% of scores (>= {s.critical_percentile:.0f}th percentile)\n"
     result += f"- **Watchlist**: {s.watchlist_percentile:.0f}th - {s.critical_percentile:.0f}th percentile\n"
     result += f"- **Monitoring**: Below {s.watchlist_percentile:.0f}th percentile\n"
+    result += f"\n### Data Quality\n\n"
+    result += "FCF burn rate and cash runway use **trailing 4 quarters** to reflect current operations.\n"
+    result += "An IQR-based outlier filter (3x fence) automatically excludes absurd data points from source API errors.\n"
     return result
 
 

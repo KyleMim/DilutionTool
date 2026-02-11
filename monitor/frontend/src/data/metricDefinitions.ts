@@ -32,15 +32,16 @@ export const METRICS: Record<string, MetricDefinition> = {
     detailedDesc:
       "Companies burning cash faster relative to their market cap are more likely to raise capital " +
       "through dilutive offerings (secondary offerings, convertible debt, ATM programs). " +
-      "This metric takes the average of all negative free cash flow quarters, annualizes it, " +
-      "and divides by market cap to get a burn rate.",
+      "This metric takes the mean of negative free cash flow quarters from the trailing 4 quarters, " +
+      "annualizes it, and divides by market cap to get a burn rate. " +
+      "Absurd outliers (e.g. bad data from the source API) are automatically excluded using IQR-based detection.",
     calculation:
-      "Burn rate = avg(negative FCF quarters) \u00d7 4 / market cap. " +
+      "Burn rate = avg(trailing 4Q negative FCF) \u00d7 4 / market cap. " +
       "Score = |burn_rate| / ceiling \u00d7 100, capped at 100. Default ceiling: 70%.",
-    timePeriod: "All available quarters with negative FCF (up to 12 quarters)",
+    timePeriod: "Trailing 4 quarters (with IQR outlier filtering)",
     scoreInterpretation: "Higher score = burning cash faster relative to size",
     defaultWeight: "20% of composite score",
-    caveat: "Only counts quarters with negative FCF; profitable quarters are excluded from the average.",
+    caveat: "Only counts quarters with negative FCF; profitable quarters are excluded from the average. Statistical outliers are filtered to prevent bad source data from skewing results.",
   },
 
   sbc_revenue: {
@@ -89,9 +90,9 @@ export const METRICS: Record<string, MetricDefinition> = {
       "The score is inverse: shorter runway = higher score. " +
       "If the company isn't burning cash (all quarters have positive FCF), this metric returns null.",
     calculation:
-      "Runway = latest_cash / abs(avg_quarterly_FCF_burn) \u00d7 3 months. " +
+      "Runway = latest_cash / abs(avg trailing 4Q FCF burn) \u00d7 3 months. " +
       "Score = (max_months - runway) / max_months \u00d7 100, min 0. Default max: 24 months.",
-    timePeriod: "Latest quarter cash balance; all quarters for average burn rate",
+    timePeriod: "Latest quarter cash balance; trailing 4 quarters for average burn rate (with IQR outlier filtering)",
     scoreInterpretation: "Higher score = less cash runway = higher urgency to raise capital",
     defaultWeight: "10% of composite score",
   },
