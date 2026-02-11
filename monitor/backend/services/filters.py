@@ -3,16 +3,11 @@
 import re
 
 SPAC_PATTERNS = [
-    r"\bAcquisition\s+Corp",
-    r"\bAcquisition\s+Inc",
-    r"\bAcquisition\s+Co\b",
-    r"\bAcquisition\s+Ltd",
-    r"\bAcquisition\s+LLC",
+    r"\bAcquisition\b",
     r"\bBlank\s+Check\b",
     r"\bSPAC\b",
     r"\bMerger\s+Corp",
     r"\bMerger\s+Sub\b",
-    r"\bCapital\s+Acquisition\b",
     r"\bSpecial\s+Purpose\b",
 ]
 

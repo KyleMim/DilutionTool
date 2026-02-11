@@ -426,6 +426,7 @@ def main():
     parser.add_argument("--resume", action="store_true", help="Skip already-enriched companies")
     parser.add_argument("--enrich-only", action="store_true", help="Skip screening, just enrich/score existing candidates")
     parser.add_argument("--score-only", action="store_true", help="Skip all data fetching, just rescore + retier using existing DB data")
+    parser.add_argument("--purge-spacs", action="store_true", help="Deactivate all SPAC/acquisition companies and exit")
     args = parser.parse_args()
 
     config = get_config()
@@ -441,6 +442,21 @@ def main():
 
     fmp = FMPClient(api_key=config.fmp_api_key or "") if config.fmp_api_key else None
     edgar = EdgarClient(user_agent=config.edgar_user_agent)
+
+    if args.purge_spacs:
+        tracked = session.query(Company).filter(
+            Company.tracking_tier.in_(["critical", "watchlist", "monitoring"])
+        ).all()
+        purged = 0
+        for company in tracked:
+            if is_spac_name(company.name):
+                logger.info("Purging SPAC: %s (%s)", company.ticker, company.name)
+                company.tracking_tier = "inactive"
+                purged += 1
+        session.commit()
+        logger.info("Purged %d SPACs from tracked list", purged)
+        session.close()
+        return
 
     try:
         run_backfill(
