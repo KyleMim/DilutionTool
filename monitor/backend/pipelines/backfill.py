@@ -19,6 +19,7 @@ from backend.services.fmp_client import FMPClient, _date_to_fiscal_period
 from backend.services.edgar_client import EdgarClient
 from backend.services.scoring import score_company, score_all
 from backend.services.filters import is_spac_name
+from backend.pipelines.validate import validate_incoming_record
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,12 +29,85 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def assign_tiers(db_session, scores: list, config) -> dict:
+    """Assign tracking tiers by percentile rank and return tier counts."""
+    sorted_scores = sorted(scores, key=lambda s: s.composite_score)
+    n = len(sorted_scores)
+    critical_idx = int(n * config.scoring.critical_percentile / 100)
+    watchlist_idx = int(n * config.scoring.watchlist_percentile / 100)
+
+    counts = {"critical": 0, "watchlist": 0, "monitoring": 0}
+    for i, score in enumerate(sorted_scores):
+        company = db_session.get(Company, score.company_id)
+        if i >= critical_idx:
+            company.tracking_tier = "critical"
+            counts["critical"] += 1
+        elif i >= watchlist_idx:
+            company.tracking_tier = "watchlist"
+            counts["watchlist"] += 1
+        else:
+            company.tracking_tier = "monitoring"
+            counts["monitoring"] += 1
+    db_session.commit()
+    return counts
+
+
+def print_top_scores(db_session, scores: list, n: int = 10):
+    """Print a summary table of the top N scores."""
+    top = sorted(scores, key=lambda s: s.composite_score, reverse=True)[:n]
+    if not top:
+        return
+    print("\n" + "=" * 70)
+    print(f"{'Rank':<6}{'Ticker':<10}{'Score':<10}{'Share CAGR':<12}{'FCF Burn':<10}{'Offerings':<10}")
+    print("-" * 70)
+    for rank, score in enumerate(top, 1):
+        company = db_session.get(Company, score.company_id)
+        cagr = f"{score.share_cagr_3y:.0%}" if score.share_cagr_3y is not None else "N/A"
+        burn = f"{score.fcf_burn_rate:.0%}" if score.fcf_burn_rate is not None else "N/A"
+        offerings = score.offering_count_3y if score.offering_count_3y is not None else 0
+        print(f"{rank:<6}{company.ticker:<10}{score.composite_score:<10.1f}{cagr:<12}{burn:<10}{offerings:<10}")
+    print("=" * 70 + "\n")
+
+
+def fetch_prices(db_session, fmp_client, scores: list, only_missing: bool = False):
+    """Fetch trailing 12-month price changes for scored companies.
+
+    Args:
+        only_missing: If True, skip companies that already have price_change_12m
+                      (carried forward from previous score). Saves API calls.
+    """
+    if not fmp_client:
+        logger.info("Skipping price fetch (no FMP client)")
+        return
+
+    logger.info("Fetching trailing 12-month price changes%s...",
+                " (only missing)" if only_missing else "")
+    price_updated = 0
+    skipped = 0
+    for score in scores:
+        if only_missing and score.price_change_12m is not None:
+            skipped += 1
+            continue
+        company = db_session.get(Company, score.company_id)
+        try:
+            pct = fmp_client.get_price_change_12m(company.ticker)
+            if pct is not None:
+                score.price_change_12m = round(pct, 4)
+                price_updated += 1
+        except Exception as e:
+            logger.warning("Price fetch failed for %s: %s", company.ticker, e)
+    db_session.commit()
+    logger.info("Updated 12-month price change for %d companies (skipped %d with existing data)",
+                price_updated, skipped)
+
+
 def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=3000, quick_mode=False, resume=False, enrich_only=False, score_only=False):
     """Main backfill pipeline."""
 
     if score_only:
         # ------------------------------------------------------------------ #
         # Score-only mode: skip Steps 1-3, just rescore + retier
+        # No price fetch — score_company() carries forward price_change_12m
         # ------------------------------------------------------------------ #
         logger.info("Score-only mode: rescoring all tracked companies with existing data...")
         company_count = db_session.query(Company).filter(
@@ -43,62 +117,12 @@ def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=300
         if company_count == 0:
             logger.warning("No tracked companies found — database may be empty. Nothing to rescore.")
             return []
+
         scores = score_all(db_session, config.scoring)
-
-        # Fetch trailing 12-month price changes (requires FMP API key)
-        if fmp_client:
-            logger.info("Fetching trailing 12-month price changes...")
-            price_updated = 0
-            for score in scores:
-                company = db_session.get(Company, score.company_id)
-                try:
-                    pct = fmp_client.get_price_change_12m(company.ticker)
-                    if pct is not None:
-                        score.price_change_12m = round(pct, 4)
-                        price_updated += 1
-                except Exception as e:
-                    logger.warning("Price fetch failed for %s: %s", company.ticker, e)
-            db_session.commit()
-            logger.info("Updated 12-month price change for %d companies", price_updated)
-        else:
-            logger.info("Skipping price fetch (no FMP_API_KEY)")
-
-        # Re-assign tiers by percentile rank
-        sorted_scores = sorted(scores, key=lambda s: s.composite_score)
-        n = len(sorted_scores)
-        critical_idx = int(n * config.scoring.critical_percentile / 100)
-        watchlist_idx = int(n * config.scoring.watchlist_percentile / 100)
-
-        critical_count = watchlist_count = monitoring_count = 0
-        for i, score in enumerate(sorted_scores):
-            company = db_session.get(Company, score.company_id)
-            if i >= critical_idx:
-                company.tracking_tier = "critical"
-                critical_count += 1
-            elif i >= watchlist_idx:
-                company.tracking_tier = "watchlist"
-                watchlist_count += 1
-            else:
-                company.tracking_tier = "monitoring"
-                monitoring_count += 1
-        db_session.commit()
-
-        logger.info("Critical: %d, Watchlist: %d, Monitoring: %d", critical_count, watchlist_count, monitoring_count)
-
-        # Print top 10
-        top_scores = sorted(scores, key=lambda s: s.composite_score, reverse=True)[:10]
-        if top_scores:
-            print("\n" + "=" * 70)
-            print(f"{'Rank':<6}{'Ticker':<10}{'Score':<10}{'Share CAGR':<12}{'FCF Burn':<10}{'Offerings':<10}")
-            print("-" * 70)
-            for rank, score in enumerate(top_scores, 1):
-                company = db_session.get(Company, score.company_id)
-                cagr = f"{score.share_cagr_3y:.0%}" if score.share_cagr_3y is not None else "N/A"
-                burn = f"{score.fcf_burn_rate:.0%}" if score.fcf_burn_rate is not None else "N/A"
-                offerings = score.offering_count_3y if score.offering_count_3y is not None else 0
-                print(f"{rank:<6}{company.ticker:<10}{score.composite_score:<10.1f}{cagr:<12}{burn:<10}{offerings:<10}")
-            print("=" * 70 + "\n")
-
+        counts = assign_tiers(db_session, scores, config)
+        logger.info("Critical: %d, Watchlist: %d, Monitoring: %d",
+                     counts["critical"], counts["watchlist"], counts["monitoring"])
+        print_top_scores(db_session, scores)
         return scores
 
     if enrich_only:
@@ -245,19 +269,38 @@ def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=300
         if i % 10 == 0:
             logger.info("Enriching progress: %d/%d", i, len(candidates))
 
-        # Skip if already enriched (resume mode)
+        # In resume mode, skip SEC filings fetch for already-enriched companies
+        # but still re-fetch fundamentals to pick up new quarters and corrections
+        skip_filings = False
         if resume:
             has_fundamentals = db_session.query(FundamentalsQuarterly).filter_by(company_id=company.id).count() > 0
             if has_fundamentals:
-                logger.info("Skipping %s (already enriched)", company.ticker)
-                continue
+                skip_filings = True
 
         try:
             # Pull full fundamentals
             fundamentals = fmp_client.get_full_fundamentals(company.ticker, limit=12)
 
+            # Load existing fundamentals for this company (for validation)
+            existing_fundamentals = (
+                db_session.query(FundamentalsQuarterly)
+                .filter_by(company_id=company.id)
+                .order_by(FundamentalsQuarterly.fiscal_period.asc())
+                .all()
+            )
+
             for record in fundamentals:
                 fiscal_period = record.get("fiscal_period", "unknown")
+
+                # Validate incoming record against existing data
+                record = validate_incoming_record(
+                    ticker=company.ticker,
+                    fiscal_period=fiscal_period,
+                    incoming=record,
+                    existing_fundamentals=existing_fundamentals,
+                    market_cap=company.market_cap,
+                )
+
                 existing = (
                     db_session.query(FundamentalsQuarterly)
                     .filter_by(company_id=company.id, fiscal_period=fiscal_period)
@@ -272,7 +315,7 @@ def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=300
                 else:
                     # Parse fiscal year/quarter from period
                     fy, fq = _parse_fiscal_period(fiscal_period)
-                    db_session.add(FundamentalsQuarterly(
+                    new_row = FundamentalsQuarterly(
                         company_id=company.id,
                         fiscal_period=fiscal_period,
                         fiscal_year=fy,
@@ -282,9 +325,18 @@ def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=300
                         stock_based_compensation=record.get("sbc"),
                         revenue=record.get("revenue"),
                         cash_and_equivalents=record.get("cash"),
-                    ))
+                    )
+                    db_session.add(new_row)
+                    # Add to existing_fundamentals so subsequent records
+                    # in the same batch can be validated against it
+                    existing_fundamentals.append(new_row)
 
-            # Look up CIK and pull filings
+            # Look up CIK and pull filings (skip in resume mode if already done)
+            if skip_filings:
+                db_session.commit()
+                enriched += 1
+                continue
+
             cik = edgar_client.lookup_cik(company.ticker)
             if cik:
                 company.cik = cik
@@ -344,59 +396,17 @@ def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=300
 
     scores = score_all(db_session, config.scoring)
 
-    # Step 4b: Fetch trailing 12-month price changes for scored companies
-    logger.info("Step 4b: Fetching trailing 12-month price changes...")
-    price_updated = 0
-    for score in scores:
-        company = db_session.get(Company, score.company_id)
-        try:
-            pct = fmp_client.get_price_change_12m(company.ticker)
-            if pct is not None:
-                score.price_change_12m = round(pct, 4)
-                price_updated += 1
-        except Exception as e:
-            logger.warning("Price fetch failed for %s: %s", company.ticker, e)
-    db_session.commit()
-    logger.info("Updated 12-month price change for %d companies", price_updated)
+    # Step 4b: Fetch prices only for companies missing price_change_12m
+    # (score_company carries forward from previous scores, so only truly
+    # new companies need a fresh fetch)
+    fetch_prices(db_session, fmp_client, scores, only_missing=True)
 
     # Assign tiers by percentile rank
-    sorted_scores = sorted(scores, key=lambda s: s.composite_score)
-    n = len(sorted_scores)
-    critical_idx = int(n * config.scoring.critical_percentile / 100)
-    watchlist_idx = int(n * config.scoring.watchlist_percentile / 100)
+    counts = assign_tiers(db_session, scores, config)
+    logger.info("Critical: %d, Watchlist: %d, Monitoring: %d",
+                counts["critical"], counts["watchlist"], counts["monitoring"])
 
-    critical_count = 0
-    watchlist_count = 0
-    monitoring_count = 0
-    for i, score in enumerate(sorted_scores):
-        company = db_session.get(Company, score.company_id)
-        if i >= critical_idx:
-            company.tracking_tier = "critical"
-            critical_count += 1
-        elif i >= watchlist_idx:
-            company.tracking_tier = "watchlist"
-            watchlist_count += 1
-        else:
-            company.tracking_tier = "monitoring"
-            monitoring_count += 1
-    db_session.commit()
-
-    logger.info("Critical: %d, Watchlist: %d, Monitoring: %d", critical_count, watchlist_count, monitoring_count)
-
-    # Print top 10
-    top_scores = sorted(scores, key=lambda s: s.composite_score, reverse=True)[:10]
-    if top_scores:
-        print("\n" + "=" * 70)
-        print(f"{'Rank':<6}{'Ticker':<10}{'Score':<10}{'Share CAGR':<12}{'FCF Burn':<10}{'Offerings':<10}")
-        print("-" * 70)
-        for rank, score in enumerate(top_scores, 1):
-            company = db_session.get(Company, score.company_id)
-            cagr = f"{score.share_cagr_3y:.0%}" if score.share_cagr_3y is not None else "N/A"
-            burn = f"{score.fcf_burn_rate:.0%}" if score.fcf_burn_rate is not None else "N/A"
-            offerings = score.offering_count_3y if score.offering_count_3y is not None else 0
-            print(f"{rank:<6}{company.ticker:<10}{score.composite_score:<10.1f}{cagr:<12}{burn:<10}{offerings:<10}")
-        print("=" * 70 + "\n")
-
+    print_top_scores(db_session, scores)
     return scores
 
 

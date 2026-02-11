@@ -170,25 +170,16 @@ def health():
 def admin_rescore(db: Session = Depends(get_db)):
     """One-time rescore of all companies using current scoring logic."""
     from backend.services.scoring import score_all
+    from backend.pipelines.backfill import assign_tiers
     config = get_config()
     scores = score_all(db, config.scoring)
+    counts = assign_tiers(db, scores, config)
 
-    # Re-assign tiers by percentile rank
-    sorted_scores = sorted(scores, key=lambda s: s.composite_score)
-    n = len(sorted_scores)
-    critical_idx = int(n * config.scoring.critical_percentile / 100)
-    watchlist_idx = int(n * config.scoring.watchlist_percentile / 100)
-    for i, score in enumerate(sorted_scores):
-        company = db.get(Company, score.company_id)
-        if i >= critical_idx:
-            company.tracking_tier = "critical"
-        elif i >= watchlist_idx:
-            company.tracking_tier = "watchlist"
-        else:
-            company.tracking_tier = "monitoring"
-    db.commit()
-
-    return {"rescored": len(scores), "message": "All companies rescored with current logic"}
+    return {
+        "rescored": len(scores),
+        "tiers": counts,
+        "message": "All companies rescored with current logic",
+    }
 
 
 @app.get("/api/companies", response_model=List[CompanyListItem])

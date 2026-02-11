@@ -2,7 +2,11 @@
 Validate fundamentals data: detect statistical outliers and optionally correct
 them using web search.
 
-Usage:
+Two modes:
+  1. CLI: scan existing DB records for outliers and optionally fix via web search.
+  2. Ingestion: validate incoming FMP records before storing (called from backfill).
+
+CLI Usage:
   python -m backend.pipelines.validate                 # Scan & report only
   python -m backend.pipelines.validate --fix           # Interactive fix (confirm each)
   python -m backend.pipelines.validate --fix --yes     # Auto-fix all
@@ -12,6 +16,7 @@ import argparse
 import logging
 import os
 import re
+import statistics
 import sys
 
 from dotenv import load_dotenv
@@ -37,6 +42,119 @@ NUMERIC_FIELDS = [
     "stock_based_compensation",
     "shares_outstanding_diluted",
 ]
+
+# Map from FMP merged record keys to FundamentalsQuarterly column names
+FMP_TO_DB_FIELD = {
+    "fcf": "free_cash_flow",
+    "cash": "cash_and_equivalents",
+    "revenue": "revenue",
+    "sbc": "stock_based_compensation",
+    "shares_outstanding": "shares_outstanding_diluted",
+}
+
+# Incoming values that deviate by more than this factor from the median
+# of existing quarters are flagged as suspect and sent to web search.
+SUSPECT_THRESHOLD = 5.0
+
+# For new companies with no history, cap values relative to market cap.
+# E.g., FCF shouldn't exceed 3x market cap in a single quarter.
+MARKET_CAP_RATIO_LIMIT = 3.0
+
+
+def validate_incoming_record(
+    ticker: str,
+    fiscal_period: str,
+    incoming: dict,
+    existing_fundamentals: list[FundamentalsQuarterly],
+    market_cap: float | None = None,
+) -> dict:
+    """Validate an incoming FMP record against existing data for a company.
+
+    Checks each numeric field:
+      - If the company has 3+ existing quarters, flag values that deviate
+        by more than SUSPECT_THRESHOLD from the median.
+      - If no history exists, apply market-cap-relative bounds.
+      - Suspect values are validated via web search. If web search returns
+        a corrected value, use that. If it confirms the value is wrong
+        but can't find the correct one, discard the field (set to None).
+
+    Args:
+        ticker: Company ticker symbol
+        fiscal_period: e.g. "2025-Q1"
+        incoming: Dict with FMP keys (fcf, cash, revenue, sbc, shares_outstanding)
+        existing_fundamentals: List of existing FundamentalsQuarterly rows for this company
+        market_cap: Company's current market cap (for absolute bounds on new companies)
+
+    Returns:
+        Cleaned copy of incoming dict with suspect values corrected or removed.
+    """
+    cleaned = dict(incoming)
+
+    for fmp_key, db_field in FMP_TO_DB_FIELD.items():
+        value = incoming.get(fmp_key)
+        if value is None:
+            continue
+
+        # Collect existing values for this field
+        existing_vals = [
+            getattr(f, db_field) for f in existing_fundamentals
+            if getattr(f, db_field) is not None
+        ]
+
+        is_suspect = False
+        reason = ""
+
+        if len(existing_vals) >= 3:
+            # Compare against median of existing data
+            median_val = statistics.median(existing_vals)
+
+            if median_val != 0:
+                ratio = abs(value / median_val)
+                if ratio > SUSPECT_THRESHOLD:
+                    is_suspect = True
+                    reason = f"{ratio:.1f}x median ({median_val:,.0f})"
+            elif abs(value) > 0:
+                # Median is 0 but incoming is non-zero — check if existing
+                # values are all near zero
+                max_existing = max(abs(v) for v in existing_vals) if existing_vals else 0
+                if max_existing > 0 and abs(value) / max_existing > SUSPECT_THRESHOLD:
+                    is_suspect = True
+                    reason = f"{abs(value)/max_existing:.1f}x max existing ({max_existing:,.0f})"
+                elif max_existing == 0 and abs(value) > 1e6:
+                    # All existing are 0, incoming is large — suspicious
+                    is_suspect = True
+                    reason = f"all existing are 0, incoming is {value:,.0f}"
+
+        elif market_cap and market_cap > 0:
+            # New company or sparse data — use market cap as sanity check
+            if abs(value) > market_cap * MARKET_CAP_RATIO_LIMIT:
+                is_suspect = True
+                reason = f"{abs(value)/market_cap:.1f}x market cap ({market_cap:,.0f})"
+
+        if is_suspect:
+            logger.warning(
+                "SUSPECT %s %s %s: %s = %.0f (%s) -- validating via web search",
+                ticker, fiscal_period, db_field, fmp_key, value, reason,
+            )
+
+            corrected = web_search_correct_value(ticker, db_field, fiscal_period, value)
+            if corrected is not None:
+                # Web search found a value — use it
+                logger.info(
+                    "Web search corrected %s %s %s: %.0f -> %.0f",
+                    ticker, fiscal_period, db_field, value, corrected,
+                )
+                cleaned[fmp_key] = corrected
+            else:
+                # Web search couldn't find the correct value — discard this field
+                # rather than store a potentially bad value
+                logger.warning(
+                    "Web search inconclusive for %s %s %s -- discarding value %.0f",
+                    ticker, fiscal_period, db_field, value,
+                )
+                cleaned[fmp_key] = None
+
+    return cleaned
 
 
 def detect_outliers_for_company(
