@@ -89,6 +89,15 @@ def score_company(db_session: Session, company_id: int, config: ScoringConfig) -
     # Composite: weighted average with renormalization for missing scores
     composite = _weighted_composite(scores, config)
 
+    # Carry forward price_change_12m from previous score (if any)
+    prev_score = (
+        db_session.query(DilutionScore)
+        .filter_by(company_id=company_id)
+        .order_by(desc(DilutionScore.id))
+        .first()
+    )
+    prev_price = prev_score.price_change_12m if prev_score else None
+
     # Save to DB
     dilution_score = DilutionScore(
         company_id=company_id,
@@ -106,6 +115,7 @@ def score_company(db_session: Session, company_id: int, config: ScoringConfig) -
         offering_count_3y=metrics.get("offering_count_3y"),
         cash_runway_months=metrics.get("cash_runway_months"),
         atm_program_active=metrics.get("atm_program_active"),
+        price_change_12m=prev_price,
     )
     db_session.add(dilution_score)
     db_session.commit()
