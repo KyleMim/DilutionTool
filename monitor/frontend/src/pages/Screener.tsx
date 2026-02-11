@@ -243,9 +243,39 @@ export default function Screener() {
       <PipelineExplainer />
 
       {/* Filters */}
-      <div className="mb-4 flex gap-3 items-center">
+      <div className="mb-4 flex gap-3 items-start">
+        {/* Tier filter */}
+        <select
+          value={tier ?? ""}
+          onChange={(e) => { setTier(e.target.value || null); setPage(0); }}
+          className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-gray-100 appearance-none cursor-pointer pr-8 focus:outline-none focus:border-accent shrink-0"
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center' }}
+        >
+          <option value="">All Tiers</option>
+          <option value="critical">Critical</option>
+          <option value="watchlist">Watchlist</option>
+          {showMonitoring && <option value="monitoring">Monitoring</option>}
+        </select>
+
+        {/* Sector filter */}
+        {sectorCounts.length > 0 && (
+          <select
+            value={sector ?? ""}
+            onChange={(e) => { setSector(e.target.value || null); setPage(0); }}
+            className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-gray-100 appearance-none cursor-pointer pr-8 focus:outline-none focus:border-accent shrink-0"
+            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center' }}
+          >
+            <option value="">All Sectors</option>
+            {sectorCounts.map((s) => (
+              <option key={s.sector} value={s.sector}>
+                {s.sector} ({s.count})
+              </option>
+            ))}
+          </select>
+        )}
+
         {/* Search / filter bar */}
-        <div className="relative flex-1 max-w-md">
+        <div className="relative flex-1">
           <input
             type="text"
             value={search}
@@ -266,36 +296,6 @@ export default function Screener() {
             </div>
           )}
         </div>
-
-        {/* Tier filter */}
-        <select
-          value={tier ?? ""}
-          onChange={(e) => { setTier(e.target.value || null); setPage(0); }}
-          className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-gray-100 appearance-none cursor-pointer pr-8 focus:outline-none focus:border-accent"
-          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center' }}
-        >
-          <option value="">All Tiers</option>
-          <option value="critical">Critical</option>
-          <option value="watchlist">Watchlist</option>
-          {showMonitoring && <option value="monitoring">Monitoring</option>}
-        </select>
-
-        {/* Sector filter */}
-        {sectorCounts.length > 0 && (
-          <select
-            value={sector ?? ""}
-            onChange={(e) => { setSector(e.target.value || null); setPage(0); }}
-            className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-gray-100 appearance-none cursor-pointer pr-8 focus:outline-none focus:border-accent"
-            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center' }}
-          >
-            <option value="">All Sectors</option>
-            {sectorCounts.map((s) => (
-              <option key={s.sector} value={s.sector}>
-                {s.sector} ({s.count})
-              </option>
-            ))}
-          </select>
-        )}
       </div>
 
       {/* Table */}
