@@ -35,8 +35,97 @@ function formatMonths(v: number | null): string {
   return `${v.toFixed(0)}mo`;
 }
 
+// ── Search / metric filter parser ──────────────────────────────────
+
+type MetricFilter = {
+  field: keyof CompanyListItem;
+  op: ">" | "<" | ">=" | "<=";
+  value: number;
+  isPct: boolean; // whether the raw field is a 0-1 ratio displayed as %
+};
+
+const METRIC_ALIASES: Record<string, { field: keyof CompanyListItem; isPct: boolean }> = {
+  "score": { field: "composite_score", isPct: false },
+  "composite": { field: "composite_score", isPct: false },
+  "share cagr": { field: "share_cagr_3y", isPct: true },
+  "cagr": { field: "share_cagr_3y", isPct: true },
+  "shares": { field: "share_cagr_3y", isPct: true },
+  "fcf burn": { field: "fcf_burn_rate", isPct: true },
+  "fcf": { field: "fcf_burn_rate", isPct: true },
+  "burn": { field: "fcf_burn_rate", isPct: true },
+  "sbc": { field: "sbc_revenue_pct", isPct: true },
+  "sbc/rev": { field: "sbc_revenue_pct", isPct: true },
+  "sbc revenue": { field: "sbc_revenue_pct", isPct: true },
+  "offerings": { field: "offering_count_3y", isPct: false },
+  "offering": { field: "offering_count_3y", isPct: false },
+  "runway": { field: "cash_runway_months", isPct: false },
+  "cash runway": { field: "cash_runway_months", isPct: false },
+  "market cap": { field: "market_cap", isPct: false },
+  "mcap": { field: "market_cap", isPct: false },
+  "price": { field: "price_change_12m", isPct: true },
+  "price 12m": { field: "price_change_12m", isPct: true },
+  "12m": { field: "price_change_12m", isPct: true },
+};
+
+function parseSearchQuery(query: string): { text: string; filters: MetricFilter[] } {
+  const filters: MetricFilter[] = [];
+  let remaining = query;
+
+  // Match patterns like "score > 50", "cagr >= 12%", "runway < 6"
+  const filterRegex = /([a-z/ ]+?)\s*(>=|<=|>|<)\s*(-?[\d.]+)%?/gi;
+  let match;
+  while ((match = filterRegex.exec(query)) !== null) {
+    const name = match[1].trim().toLowerCase();
+    const op = match[2] as MetricFilter["op"];
+    const numVal = parseFloat(match[3]);
+    const alias = METRIC_ALIASES[name];
+    if (alias) {
+      filters.push({
+        field: alias.field,
+        op,
+        value: alias.isPct ? numVal / 100 : numVal,
+        isPct: alias.isPct,
+      });
+      remaining = remaining.replace(match[0], "");
+    }
+  }
+
+  // Also match ">{number}" patterns like "> 50 score"
+  const reverseRegex = /(>=|<=|>|<)\s*(-?[\d.]+)%?\s+([a-z/ ]+)/gi;
+  while ((match = reverseRegex.exec(query)) !== null) {
+    const op = match[1] as MetricFilter["op"];
+    const numVal = parseFloat(match[2]);
+    const name = match[3].trim().toLowerCase();
+    const alias = METRIC_ALIASES[name];
+    if (alias && !filters.some((f) => f.field === alias.field)) {
+      filters.push({
+        field: alias.field,
+        op,
+        value: alias.isPct ? numVal / 100 : numVal,
+        isPct: alias.isPct,
+      });
+      remaining = remaining.replace(match[0], "");
+    }
+  }
+
+  return { text: remaining.trim(), filters };
+}
+
+function applyMetricFilter(item: CompanyListItem, filter: MetricFilter): boolean {
+  const val = item[filter.field] as number | null;
+  if (val === null || val === undefined) return false;
+  switch (filter.op) {
+    case ">": return val > filter.value;
+    case "<": return val < filter.value;
+    case ">=": return val >= filter.value;
+    case "<=": return val <= filter.value;
+    default: return true;
+  }
+}
+
 export default function Screener() {
   const navigate = useNavigate();
+  const [search, setSearch] = useState("");
   const [sector, setSector] = useState<string | null>(null);
   const [tier, setTier] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("composite_score");
@@ -57,6 +146,8 @@ export default function Screener() {
       }),
   });
 
+  const parsed = useMemo(() => parseSearchQuery(search), [search]);
+
   const sorted = useMemo(() => {
     if (!companiesQ.data) return [];
     let filtered = [...companiesQ.data];
@@ -65,8 +156,22 @@ export default function Screener() {
     if (tier) {
       filtered = filtered.filter((c) => c.tracking_tier === tier);
     } else if (!showMonitoring) {
-      // Default: hide monitoring tier
       filtered = filtered.filter((c) => c.tracking_tier !== "monitoring");
+    }
+
+    // Text search (ticker or company name)
+    if (parsed.text) {
+      const q = parsed.text.toLowerCase();
+      filtered = filtered.filter(
+        (c) =>
+          c.ticker.toLowerCase().includes(q) ||
+          (c.name && c.name.toLowerCase().includes(q))
+      );
+    }
+
+    // Metric filters
+    for (const filter of parsed.filters) {
+      filtered = filtered.filter((c) => applyMetricFilter(c, filter));
     }
 
     return filtered.sort((a, b) => {
@@ -78,7 +183,7 @@ export default function Screener() {
       if (typeof av === "string") return av.localeCompare(bv as string) * (sortDir === "desc" ? -1 : 1);
       return ((av as number) - (bv as number)) * (sortDir === "desc" ? -1 : 1);
     });
-  }, [companiesQ.data, sortKey, sortDir, tier, showMonitoring]);
+  }, [companiesQ.data, sortKey, sortDir, tier, showMonitoring, parsed]);
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
   const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -123,7 +228,30 @@ export default function Screener() {
       <PipelineExplainer />
 
       {/* Filters */}
-      <div className="mb-4 flex gap-3">
+      <div className="mb-4 flex gap-3 items-center">
+        {/* Search / filter bar */}
+        <div className="relative flex-1 max-w-md">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            placeholder='Search ticker, company, or filter (e.g. "score > 50", "cagr > 12%")'
+            className="w-full bg-surface border border-border rounded-lg px-3 py-2 pl-9 text-sm text-gray-100 placeholder:text-muted/60 focus:outline-none focus:border-accent"
+          />
+          <svg className="absolute left-3 top-2.5 w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {parsed.filters.length > 0 && (
+            <div className="flex gap-1.5 mt-1.5">
+              {parsed.filters.map((f, i) => (
+                <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-accent/15 text-accent border border-accent/20">
+                  {String(f.field).replace(/_/g, " ")} {f.op} {f.isPct ? `${(f.value * 100).toFixed(0)}%` : f.value}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Tier filter */}
         <select
           value={tier ?? ""}
