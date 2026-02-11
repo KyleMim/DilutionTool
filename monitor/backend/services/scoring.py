@@ -58,7 +58,7 @@ def score_company(db_session: Session, company_id: int, config: ScoringConfig) -
     sbc_rev_pct = _calc_sbc_revenue_pct(fundamentals)
     metrics["sbc_revenue_pct"] = sbc_rev_pct
     if sbc_rev_pct is not None:
-        scores["sbc_revenue_score"] = min(sbc_rev_pct / config.sbc_revenue_ceiling * 100, 100)
+        scores["sbc_revenue_score"] = max(0, min(sbc_rev_pct / config.sbc_revenue_ceiling * 100, 100))
     elif _has_sbc_no_revenue(fundamentals):
         scores["sbc_revenue_score"] = 100
         metrics["sbc_revenue_pct"] = 1.0
