@@ -44,6 +44,8 @@ export default function Screener() {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 100;
 
+  const showMonitoring = localStorage.getItem("showMonitoring") === "true";
+
   const statsQ = useQuery({ queryKey: ["stats"], queryFn: fetchStats });
   const sectorsQ = useQuery({ queryKey: ["sectors"], queryFn: fetchSectors });
   const companiesQ = useQuery({
@@ -62,6 +64,9 @@ export default function Screener() {
     // Filter by tier
     if (tier) {
       filtered = filtered.filter((c) => c.tracking_tier === tier);
+    } else if (!showMonitoring) {
+      // Default: hide monitoring tier
+      filtered = filtered.filter((c) => c.tracking_tier !== "monitoring");
     }
 
     return filtered.sort((a, b) => {
@@ -73,7 +78,7 @@ export default function Screener() {
       if (typeof av === "string") return av.localeCompare(bv as string) * (sortDir === "desc" ? -1 : 1);
       return ((av as number) - (bv as number)) * (sortDir === "desc" ? -1 : 1);
     });
-  }, [companiesQ.data, sortKey, sortDir, tier]);
+  }, [companiesQ.data, sortKey, sortDir, tier, showMonitoring]);
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
   const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -103,10 +108,9 @@ export default function Screener() {
 
       {/* Stats cards */}
       {stats && (
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-3 gap-4 mb-6">
           <StatCard label="Critical" value={stats.critical_count.toString()} color="text-danger" />
           <StatCard label="Watchlist" value={stats.watchlist_count.toString()} color="text-warning" />
-          <StatCard label="Monitoring" value={stats.monitoring_count.toString()} color="text-gray-100" />
           <StatCard
             label="Avg Score"
             value={stats.avg_score ? stats.avg_score.toFixed(1) : "--"}
@@ -130,7 +134,7 @@ export default function Screener() {
           <option value="">All Tiers</option>
           <option value="critical">Critical</option>
           <option value="watchlist">Watchlist</option>
-          <option value="monitoring">Monitoring</option>
+          {showMonitoring && <option value="monitoring">Monitoring</option>}
         </select>
 
         {/* Sector filter */}

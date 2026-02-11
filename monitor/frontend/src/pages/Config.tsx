@@ -124,6 +124,9 @@ export default function Config() {
   const [localThresholds, setLocalThresholds] = useState<Record<string, number>>({});
   const [localWeights, setLocalWeights] = useState<Record<string, number>>({});
   const [saved, setSaved] = useState(false);
+  const [showMonitoring, setShowMonitoring] = useState(
+    () => localStorage.getItem("showMonitoring") === "true"
+  );
 
   const thresholdsQ = useQuery({
     queryKey: ["thresholds"],
@@ -181,6 +184,28 @@ export default function Config() {
       <p className="text-sm text-muted mb-6">
         Adjust scoring thresholds and weights. Changes are in-memory and reset on server restart.
       </p>
+
+      {/* Display settings */}
+      <div className="bg-surface rounded-lg border border-border p-4 mb-6">
+        <h2 className="text-sm font-medium text-gray-200 mb-3">Display</h2>
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showMonitoring}
+            onChange={(e) => {
+              setShowMonitoring(e.target.checked);
+              localStorage.setItem("showMonitoring", String(e.target.checked));
+            }}
+            className="w-4 h-4 rounded border-border bg-surface text-accent focus:ring-accent"
+          />
+          <div>
+            <span className="text-sm text-gray-200">Show Monitoring Companies</span>
+            <p className="text-xs text-muted">
+              Include lower-scoring monitoring tier in the screener table
+            </p>
+          </div>
+        </label>
+      </div>
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">

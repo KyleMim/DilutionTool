@@ -685,7 +685,7 @@ def get_stats(db: Session = Depends(get_db)):
     watchlist = db.query(Company).filter_by(tracking_tier="watchlist").count()
     monitoring = db.query(Company).filter_by(tracking_tier="monitoring").count()
 
-    # Average score (for companies being tracked)
+    # Average score (critical + watchlist only, excludes monitoring noise)
     score_subq = (
         db.query(
             DilutionScore.company_id,
@@ -697,6 +697,8 @@ def get_stats(db: Session = Depends(get_db)):
     avg_score_result = (
         db.query(func.avg(DilutionScore.composite_score))
         .join(score_subq, DilutionScore.id == score_subq.c.max_id)
+        .join(Company, Company.id == DilutionScore.company_id)
+        .filter(Company.tracking_tier.in_(["critical", "watchlist"]))
         .scalar()
     )
 
