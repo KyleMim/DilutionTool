@@ -36,22 +36,32 @@ def run_backfill(db_session, fmp_client, edgar_client, config, max_companies=300
         # Score-only mode: skip Steps 1-3, just rescore + retier
         # ------------------------------------------------------------------ #
         logger.info("Score-only mode: rescoring all tracked companies with existing data...")
+        company_count = db_session.query(Company).filter(
+            Company.tracking_tier.in_(["critical", "watchlist", "monitoring"])
+        ).count()
+        logger.info("Found %d tracked companies to rescore", company_count)
+        if company_count == 0:
+            logger.warning("No tracked companies found — database may be empty. Nothing to rescore.")
+            return []
         scores = score_all(db_session, config.scoring)
 
-        # Fetch trailing 12-month price changes
-        logger.info("Fetching trailing 12-month price changes...")
-        price_updated = 0
-        for score in scores:
-            company = db_session.get(Company, score.company_id)
-            try:
-                pct = fmp_client.get_price_change_12m(company.ticker)
-                if pct is not None:
-                    score.price_change_12m = round(pct, 4)
-                    price_updated += 1
-            except Exception as e:
-                logger.warning("Price fetch failed for %s: %s", company.ticker, e)
-        db_session.commit()
-        logger.info("Updated 12-month price change for %d companies", price_updated)
+        # Fetch trailing 12-month price changes (requires FMP API key)
+        if fmp_client:
+            logger.info("Fetching trailing 12-month price changes...")
+            price_updated = 0
+            for score in scores:
+                company = db_session.get(Company, score.company_id)
+                try:
+                    pct = fmp_client.get_price_change_12m(company.ticker)
+                    if pct is not None:
+                        score.price_change_12m = round(pct, 4)
+                        price_updated += 1
+                except Exception as e:
+                    logger.warning("Price fetch failed for %s: %s", company.ticker, e)
+            db_session.commit()
+            logger.info("Updated 12-month price change for %d companies", price_updated)
+        else:
+            logger.info("Skipping price fetch (no FMP_API_KEY)")
 
         # Re-assign tiers by percentile rank
         sorted_scores = sorted(scores, key=lambda s: s.composite_score)
@@ -409,7 +419,8 @@ def main():
     args = parser.parse_args()
 
     config = get_config()
-    if not config.fmp_api_key:
+
+    if not args.score_only and not config.fmp_api_key:
         print("ERROR: FMP_API_KEY not set. Add it to .env file.")
         print("  cp .env.example .env")
         print("  # Edit .env and add your API key")
@@ -418,7 +429,7 @@ def main():
     create_tables()
     session = SessionLocal()
 
-    fmp = FMPClient(api_key=config.fmp_api_key)
+    fmp = FMPClient(api_key=config.fmp_api_key or "") if config.fmp_api_key else None
     edgar = EdgarClient(user_agent=config.edgar_user_agent)
 
     try:
