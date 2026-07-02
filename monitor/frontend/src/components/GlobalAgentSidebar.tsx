@@ -1,47 +1,53 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import ChatPanel from "./chat/ChatPanel";
 
 export default function GlobalAgentSidebar() {
   const [expanded, setExpanded] = useState(false);
-  const [width, setWidth] = useState(384); // w-96 = 384px
-  const [isResizing, setIsResizing] = useState(false);
+  const [width, setWidth] = useState(384);
   const [fullscreen, setFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isResizingRef = useRef(false);
 
   const minWidth = 300;
   const maxWidth = typeof window !== "undefined" ? window.innerWidth - 100 : 1200;
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing || !containerRef.current) return;
-
-      const container = containerRef.current;
-      const rect = container.getBoundingClientRect();
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isResizingRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
       const newWidth = rect.right - e.clientX;
-
       if (newWidth >= minWidth && newWidth <= maxWidth) {
         setWidth(newWidth);
       }
-    };
+    },
+    [maxWidth],
+  );
 
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
+  const handleMouseUp = useCallback(() => {
+    isResizingRef.current = false;
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }, [handleMouseMove]);
 
-    if (isResizing) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-    }
+  const startResize = useCallback(() => {
+    isResizingRef.current = true;
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, [handleMouseMove, handleMouseUp]);
 
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [isResizing]);
+  }, [handleMouseMove, handleMouseUp]);
 
   // Collapsed state — thin strip with sparkle icon
   if (!expanded) {
@@ -70,7 +76,7 @@ export default function GlobalAgentSidebar() {
     return (
       <div className="fixed inset-0 bg-panel z-50 flex flex-col">
         <ChatPanel
-          onClose={() => setExpanded(false)}
+          onClose={() => { setFullscreen(false); setExpanded(false); }}
           onFullscreen={() => setFullscreen(false)}
           isFullscreen={true}
         />
@@ -82,14 +88,29 @@ export default function GlobalAgentSidebar() {
   return (
     <div
       ref={containerRef}
-      style={{ width: `${width}px` }}
-      className="flex-shrink-0 border-l border-border flex flex-col relative"
+      style={{ width: `${width}px`, flexShrink: 0, position: "relative" }}
+      className="border-l border-border flex flex-col"
     >
-      {/* Draggable resize handle — wider hit area overlapping the border */}
+      {/* Draggable resize handle */}
       <div
-        onMouseDown={() => setIsResizing(true)}
-        className="absolute left-[-3px] top-0 bottom-0 w-[6px] cursor-col-resize z-10 hover:bg-accent/40 transition-colors"
-      />
+        onMouseDown={startResize}
+        style={{
+          position: "absolute",
+          left: -4,
+          top: 0,
+          bottom: 0,
+          width: 8,
+          cursor: "col-resize",
+          zIndex: 20,
+        }}
+        className="group"
+      >
+        {/* Visible resize bar */}
+        <div
+          style={{ position: "absolute", left: 3, top: 0, bottom: 0, width: 2 }}
+          className="bg-border group-hover:bg-accent transition-colors"
+        />
+      </div>
 
       <ChatPanel
         onClose={() => setExpanded(false)}
