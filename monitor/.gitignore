@@ -1,7 +1,12 @@
 .env
 data/*.db
+data/*.db-shm
+data/*.db-wal
 __pycache__/
 *.pyc
 node_modules/
 frontend/dist/
 .vite/
+*.log
+*.tsbuildinfo
+.claude/settings.local.json

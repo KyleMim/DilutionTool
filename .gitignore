@@ -1,2 +1,4 @@
-nul 
-monitor/backfill_full.log 
+nul
+monitor/backfill_full.log
+*tmp_api.json
+.claude/settings.local.json
